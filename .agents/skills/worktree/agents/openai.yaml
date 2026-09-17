@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worktree"
+  short_description: "Create or reuse the document worktree, then enter it"
+  default_prompt: "Use $worktree to create or reuse the isolated worktree for the named scoping document."

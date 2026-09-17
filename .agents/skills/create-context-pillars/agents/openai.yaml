@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create context pillars"
+  short_description: "Scaffold the lean context documents from CONTEXT_PILLARS.md into a given directory"
+  default_prompt: "Use $create-context-pillars to scaffold lean context documents in a given directory."

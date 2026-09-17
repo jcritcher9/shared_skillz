@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create scoping doc"
+  short_description: "Interactively write a new scoping document that follows implementation_notes_strategy.md"
+  default_prompt: "Use $create-scoping-doc to write a new scoping document."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worker critic loop"
+  short_description: "Drive a worker→critic loop: an Opus 4.8 medium worker implements and an Opus 4.8 high critic grades, looping per phase (or once for a single task) until Grade A / A−."
+  default_prompt: "Use $worker-critic-loop."

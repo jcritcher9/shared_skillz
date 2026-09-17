@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worker"
+  short_description: "Implement an assigned target (slice or pass) and produce a handoff"
+  default_prompt: "Use $worker. If no target is named, propose the next schedulable slice or pass. If only an area is named, classify then use that area's queue when present."

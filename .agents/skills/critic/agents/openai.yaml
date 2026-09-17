@@ -1,0 +1,4 @@
+interface:
+  display_name: "Critic"
+  short_description: "Grade a commit against its assigned target (normalized slice set)"
+  default_prompt: "Use $critic to independently grade the submitted commit against its assigned target (normalized slice set)."

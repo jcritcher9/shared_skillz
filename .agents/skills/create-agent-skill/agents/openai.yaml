@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create agent skill"
+  short_description: "Create a runtime-neutral skill in agent_protocol with thin adapters"
+  default_prompt: "Use $create-agent-skill to create a runtime-neutral skill."

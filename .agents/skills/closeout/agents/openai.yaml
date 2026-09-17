@@ -1,0 +1,4 @@
+interface:
+  display_name: "Closeout"
+  short_description: "Land a finished document branch onto main"
+  default_prompt: "Use $closeout to land the named scoping document's branch onto main and retire its worktree."

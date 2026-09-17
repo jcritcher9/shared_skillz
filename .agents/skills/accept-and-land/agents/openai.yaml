@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accept and land"
+  short_description: "Record Grade A slices as done and land them onto local main"
+  default_prompt: "Use $accept-and-land."

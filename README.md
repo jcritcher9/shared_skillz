@@ -30,6 +30,7 @@ Pins for those two folders are in `DEPENDENCIES.md`.
 | `web/` | Django operator UI (`web/manage.py`). Tracked source only: no `db.sqlite3`, no `media/` session CSVs. Living docs are in `web/codex_context/`. The UI talks HTTP to a FastAPI process. |
 | `api/` | Vendor-agnostic thoughts behind `mappings_2/api`. FastAPI is the HTTP framework. Not a copy of the Python package. |
 | `DEPENDENCIES.md` | Pins and roles for `web/` and `api/` (`requirements-api.txt` for the FastAPI stack). |
+| `scripts/` | Local start/stop: one Python for the stack, two windows, `/health` wait, orphan sweep. Path C / HubSpot launchers are not included. |
 
 `accept-and-land` and `closeout` are included because `/worker` and
 `/worker-critic-loop` stop at “propose landing”; they do not land unless
@@ -49,6 +50,7 @@ implementation_notes_strategy.md
 CONTEXT_PILLARS.md
 web/
 api/
+scripts/
 DEPENDENCIES.md
 requirements-api.txt
 .claude/skills/<name>/SKILL.md
@@ -61,7 +63,13 @@ Then open the repo in Claude Code, Grok, or Codex. Skills are discovered
 from those directories. Do not copy a role body into a runtime folder —
 two copies diverge.
 
-Typical flow:
+Local UI (from repo root):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start_local.ps1
+```
+
+Typical mill-skill flow:
 
 1. `/create-context-pillars` on a new area
 2. `/create-scoping-doc` for the initiative

@@ -67,6 +67,17 @@ FastAPI  127.0.0.1:8000   credentials + durable workflows
 Django   127.0.0.1:8001   operator UI only
 ```
 
+Launch from the repo root (see `scripts/README.md`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start_local.ps1
+powershell -ExecutionPolicy Bypass -File scripts\stop_local.ps1
+```
+
+HTTPS loopback: `scripts\start_local_https.ps1` (uses
+`web/tools/ensure_loopback_tls.py`). Without `mappings_2/api/app.py` the
+launcher starts Django only.
+
 CORS: localhost browser origins allowed on the API by default. Django
 uses a finite mutation read timeout (mill default 180s) on API POSTs.
 

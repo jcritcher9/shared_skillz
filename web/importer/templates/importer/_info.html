@@ -1,0 +1,6 @@
+{% comment %}
+Reusable info bubble. Usage:
+  {% include "importer/_info.html" with tip="Explanatory text" %}
+Renders a small, keyboard-focusable "i" icon with a hover/focus tooltip.
+{% endcomment %}
+<span class="info-bubble" tabindex="0" role="note" aria-label="{{ tip }}" data-tip="{{ tip }}">i</span>

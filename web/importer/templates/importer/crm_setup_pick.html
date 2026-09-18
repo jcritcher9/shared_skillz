@@ -1,0 +1,46 @@
+{% extends "importer/base.html" %}
+{% block title %}Set up new CRM connection · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Set up new CRM connection</h1>
+  <p class="lede">
+    Choose which CRM to set up. Practice CRM connects immediately. Salesforce
+    and HubSpot walk through app credentials then org connect. Credentials
+    stay vaulted on this device for later restarts.
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li><strong>Choose a CRM</strong></li>
+    <li>Provider steps</li>
+    <li>Connect &amp; finish</li>
+  </ol>
+
+  <form method="post" action="{% url 'importer:crm_setup_choose' %}" class="stack">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ choose_token }}" />
+    <ul class="plain-list">
+      {% for choice in provider_choices %}
+      <li style="margin-bottom: 1rem;">
+        <label style="display: grid; gap: 0.25rem; cursor: pointer;">
+          <span>
+            <input
+              type="radio"
+              name="provider_key"
+              value="{{ choice.provider_key }}"
+              {% if draft.provider_key == choice.provider_key %}checked{% endif %}
+              required
+            />
+            <strong>{{ choice.provider_label }}</strong>
+          </span>
+          <span class="muted">{{ choice.blurb }}</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Continue</button>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,269 @@
+{% extends "importer/base.html" %}
+{% block title %}Connect CRM · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Connect CRM</h1>
+  <p class="lede">
+    This is the home for CRM setup and connections. Set up an app once on this
+    device, then connect or reconnect orgs without re-entering secrets.
+    Credentials stay in the API vault; this page only shows safe status.
+  </p>
+
+  <div class="home-actions" style="margin-top: 1rem; margin-bottom: 0.6rem;">
+    <a class="btn btn-primary btn-lg" href="{% url 'importer:crm_setup_start' %}">
+      Set up new CRM connection
+    </a>
+  </div>
+  <p class="muted small" style="margin-bottom: 1.4rem;">
+    Guided setup: pick Practice, Salesforce, or HubSpot. Practice connects
+    immediately. Salesforce and HubSpot walk through app credentials then org
+    connect. Storage path is not part of this path.
+  </p>
+
+  {% include "importer/_api_technical_details.html" with api_technical=api_technical %}
+  {% include "importer/_crm_reclaim_form.html" %}
+
+  {% if stuck_registration_puts %}
+  <div class="callout" style="margin-bottom: 1.2rem;" role="status">
+    <p>
+      <strong>Stuck app registration</strong> — an earlier credential save had an
+      uncertain outcome. Use Start over after EasyImports reconciles whether the
+      app already exists on the API. Cookie clearing is not the fix.
+    </p>
+    {% for stuck in stuck_registration_puts %}
+    <form
+      method="post"
+      action="{% url 'importer:registration_start_over' stuck.provider_key %}"
+      class="inline-form"
+      style="margin-top: 0.5rem;"
+    >
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ stuck.start_over_form_token }}" />
+      <input type="hidden" name="next" value="{% url 'importer:crm_connections' %}" />
+      <button type="submit" class="btn btn-sm btn-primary">
+        Start over ({{ stuck.provider_key }})
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if has_registered_app %}
+  <div class="callout" style="margin-bottom: 1.2rem;">
+    <p>
+      <strong>Ready on this device.</strong>
+      App credentials already saved here are reused after restart. Connect or
+      reconnect without pasting secrets again. New devices still need one-time
+      app setup.
+    </p>
+  </div>
+  {% endif %}
+
+  <h2>Your connections</h2>
+  {% if connections %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Status</th>
+        <th>Label</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for connection in connections %}
+      <tr>
+        <td>{{ connection.provider_label }}</td>
+        <td>
+          {% if connection.status == "credential_unavailable" %}
+          <span class="status">Credentials unavailable</span>
+          <div class="muted small">Reconnect this CRM connection.</div>
+          {% else %}
+          <span class="status">{{ connection.status }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {{ connection.display_label|default:"—" }}
+          {% if connection.last_reclaim %}
+          <details class="technical-details">
+            <summary>Technical details</summary>
+            <p>
+              Reclaimed from another browser session at
+              {{ connection.last_reclaim.reclaimed_at }}.
+              Mutation {{ connection.last_reclaim.reclaim_mutation_id }}.
+            </p>
+          </details>
+          {% endif %}
+        </td>
+        <td class="row-actions">
+          {% if connection.reconnect_uncertain %}
+          <div class="muted small">Reconnect outcome is still uncertain. Refresh or retry the saved action.</div>
+          {% if connection.reconnect_retry_kind == "start" %}
+          <form method="post" action="{% url 'importer:crm_reconnect' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-primary">Retry reconnect</button>
+          </form>
+          {% elif connection.reconnect_retry_kind == "abandon" %}
+          <form method="post" action="{% url 'importer:crm_reconnect_abandon' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="reconnect_attempt_id" value="{{ connection.reconnect_attempt_id }}" />
+            <button type="submit" class="btn btn-sm">Retry abandon</button>
+          </form>
+          {% endif %}
+          {% if connection.reconnect_pending and connection.reconnect_attempt_id %}
+          <form method="post" action="{% url 'importer:crm_reconnect_abandon' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="reconnect_attempt_id" value="{{ connection.reconnect_attempt_id }}" />
+            <button type="submit" class="btn btn-sm">Abandon reconnect</button>
+          </form>
+          {% endif %}
+          {% elif connection.reconnect_pending %}
+          {% if connection.reconnect_can_continue %}
+          <form method="post" action="{% url 'importer:crm_reconnect_continue' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="reconnect_attempt_id" value="{{ connection.reconnect_attempt_id }}" />
+            <button type="submit" class="btn btn-sm btn-primary">Continue reconnect</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{% url 'importer:crm_reconnect_abandon' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="reconnect_attempt_id" value="{{ connection.reconnect_attempt_id }}" />
+            <button type="submit" class="btn btn-sm">Abandon reconnect</button>
+          </form>
+          {% elif connection.status == "connected" or connection.status == "pending" %}
+          <form method="post" action="{% url 'importer:crm_disconnect' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm">Disconnect</button>
+          </form>
+          {% elif connection.status == "disconnected" or connection.status == "credential_unavailable" %}
+          <form method="post" action="{% url 'importer:crm_reconnect' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-primary">Reconnect</button>
+          </form>
+          {% if connection.status == "credential_unavailable" %}
+          <form method="post" action="{% url 'importer:crm_disconnect' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm">Disconnect</button>
+          </form>
+          {% endif %}
+          {% if connection.status == "disconnected" %}
+          <form method="post" action="{% url 'importer:crm_connection_remove' connection.connection_id %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm">Remove</button>
+          </form>
+          {% endif %}
+          {% endif %}
+          {% if connection.provider_key in registered_provider_keys %}
+            {% if connection.provider_key == "salesforce" %}
+            <a class="btn btn-sm btn-ghost" href="{% url 'importer:crm_setup_salesforce' %}?edit=1">Manage app</a>
+            {% elif connection.provider_key == "hubspot" %}
+            <a class="btn btn-sm btn-ghost" href="{% url 'importer:crm_setup_hubspot' %}?edit=1">Manage app</a>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="callout" style="margin-bottom: 1.2rem;">
+    <p>
+      No CRM connections yet. Use
+      <strong>Set up new CRM connection</strong> for a guided path, or connect
+      <strong>Practice CRM</strong> below to try without a live org.
+    </p>
+  </div>
+  {% endif %}
+
+  <h2>Connect a provider</h2>
+  {% if provider_cards %}
+  <ul class="plain-list">
+    {% for card in provider_cards %}
+    <li style="margin-bottom: 0.85rem;">
+      <strong>{{ card.provider_label }}</strong>
+      {% if card.is_practice %}
+      <span class="muted">(Practice — no app registration)</span>
+      {% elif card.is_registered %}
+      <span class="muted">(app registered on this device)</span>
+      {% else %}
+      <span class="muted">({{ card.provider_key }})</span>
+      {% endif %}
+      {% if card.has_active_connection %}
+      <span class="muted">— already connected</span>
+      {% elif card.show_connect %}
+      <form method="post" action="{% url 'importer:crm_connect' %}" class="inline-form">
+        {% csrf_token %}
+        <input type="hidden" name="provider_key" value="{{ card.provider_key }}" />
+        <button type="submit" class="btn btn-sm btn-primary">
+          {{ card.connect_label }}
+        </button>
+      </form>
+      {% endif %}
+      {% if card.show_manage_app and card.manage_url_name %}
+      <a class="btn btn-sm btn-ghost" href="{% url card.manage_url_name %}?edit=1">
+        Manage app
+      </a>
+      {% endif %}
+      {% if card.ready_state %}
+      <div class="muted small" style="margin-top: 0.25rem;">{{ card.ready_state }}</div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="callout callout-warn" style="margin-bottom: 1.2rem;">
+    <p>
+      No connectable CRM providers are available yet. Set up Salesforce or
+      HubSpot once, then return here to connect an org. Secrets stay vaulted
+      on this device for later restarts.
+    </p>
+    <p>
+      <a class="btn btn-primary" href="{% url 'importer:crm_setup_start' %}">
+        Set up new CRM connection
+      </a>
+    </p>
+  </div>
+  {% endif %}
+
+  {% if uncertain_oauth %}
+  <h2>Uncertain authorizations</h2>
+  <p class="muted">
+    If CRM authorization was interrupted, wait for it to finish or abandon it
+    after one minute to start a new connection. Do not abandon while a request
+    is still in flight.
+  </p>
+  <ul class="plain-list">
+    {% for row in uncertain_oauth %}
+    <li>
+      <code>{{ row.connection_id }}</code>
+      <span class="muted">({{ row.mutation_state }}, age {{ row.age_seconds }}s)</span>
+      {% if row.can_abandon %}
+      <form
+        method="post"
+        action="{% url 'importer:crm_abandon_uncertain_connection' row.connection_id %}"
+        class="inline-form"
+      >
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm">
+          Abandon and restart
+        </button>
+      </form>
+      {% else %}
+      <span class="muted">{{ row.abandon_hint }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <div class="form-actions" style="margin-top: 1.6rem;">
+    <a class="btn" href="{% url 'importer:crm_duplicate_journey' %}">
+      Start CRM duplicate journey
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:local_settings' %}">
+      Device storage &amp; advanced
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:landing' %}">Back to home</a>
+  </div>
+</section>
+{% endblock %}

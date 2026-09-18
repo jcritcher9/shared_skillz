@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Phase 2 CRM-dupe drop fixture · EasyImports</title>
+  <link rel="stylesheet" href="../../static/importer/css/app.css">
+</head>
+<body>
+  <main class="container">
+    <form method="post" enctype="multipart/form-data" class="stack-form" id="crm-duplicate-journey-form">
+      <input type="hidden" name="form_token" value="fixture-token">
+      <fieldset class="field">
+        <legend>Where should EasyImports look?</legend>
+        <label class="choice">
+          <input type="radio" name="source_mode" value="acquire_all" checked>
+          Find duplicates in CRM
+        </label>
+        <label class="choice">
+          <input type="radio" name="source_mode" value="uploaded_population">
+          Upload records to analyze
+        </label>
+      </fieldset>
+      <div
+        class="source-mode-panel"
+        data-source-mode-panel="uploaded_population"
+        hidden
+      >
+        <div
+          class="field file-drop-zone"
+          data-file-drop="populate"
+          data-file-drop-zone
+        >
+          <label for="id_population_file">Records to analyze (CSV or Excel)</label>
+          <input
+            type="file"
+            name="population_file"
+            id="id_population_file"
+            class="file-input"
+            accept=".csv,.xlsx"
+          >
+          <p class="file-drop-hint">Or drop one CSV or Excel file here. This does not start the journey.</p>
+          <p class="file-drop-error" data-file-drop-error hidden role="alert"></p>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="button btn btn-primary" id="crm-dupe-primary-action">
+          Find duplicates
+        </button>
+      </div>
+    </form>
+  </main>
+  <script src="../../static/importer/js/file_drop_upload.js" defer></script>
+  <script>
+  (function () {
+    var form = document.getElementById("crm-duplicate-journey-form");
+    if (!form) return;
+    window.__crmDupeSubmitted = false;
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      window.__crmDupeSubmitted = true;
+    });
+    var radios = form.querySelectorAll('input[name="source_mode"]');
+    var panels = form.querySelectorAll("[data-source-mode-panel]");
+    var primary = document.getElementById("crm-dupe-primary-action");
+
+    function selectedMode() {
+      for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) return radios[i].value;
+      }
+      return "acquire_all";
+    }
+
+    function setControlsEnabled(panel, enabled) {
+      var controls = panel.querySelectorAll("input, select, textarea, button");
+      for (var i = 0; i < controls.length; i++) {
+        if (enabled) controls[i].removeAttribute("disabled");
+        else controls[i].setAttribute("disabled", "disabled");
+      }
+    }
+
+    function syncPanels() {
+      var mode = selectedMode();
+      for (var i = 0; i < panels.length; i++) {
+        var panel = panels[i];
+        var show = panel.getAttribute("data-source-mode-panel") === mode;
+        if (show) {
+          panel.removeAttribute("hidden");
+          setControlsEnabled(panel, true);
+        } else {
+          setControlsEnabled(panel, false);
+          panel.setAttribute("hidden", "hidden");
+        }
+      }
+      if (primary) {
+        primary.textContent = mode === "uploaded_population"
+          ? "Upload and continue"
+          : "Find duplicates";
+      }
+    }
+
+    for (var i = 0; i < radios.length; i++) {
+      radios[i].addEventListener("change", function () {
+        syncPanels();
+      });
+    }
+    // Same lifecycle as production: disable population_file before the
+    // deferred drop script runs.
+    syncPanels();
+  })();
+  </script>
+</body>
+</html>

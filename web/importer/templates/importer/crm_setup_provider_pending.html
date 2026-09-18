@@ -1,0 +1,38 @@
+{% extends "importer/base.html" %}
+{% block title %}{{ provider_label }} setup · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{{ provider_label }} setup</h1>
+  <p class="lede">
+    Guided {{ provider_label }} credential entry and org connect ship in the
+    next Connect CRM slices. This shell keeps your choice in a server draft so
+    the full path can continue here without leaving Connect.
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li>Choose a CRM</li>
+    <li><strong>Provider steps</strong> (guided credentials — coming soon)</li>
+    <li>Connect &amp; finish</li>
+  </ol>
+
+  <div class="callout" style="margin-bottom: 1.2rem;">
+    <p>
+      For now, app credentials can still be entered under
+      <strong>Settings</strong> (advanced dual-run path). After registration,
+      return to <a href="{% url 'importer:crm_connections' %}">Connect CRM</a>
+      to connect the org.
+    </p>
+    <p class="muted small">
+      This page never accepts or stores client secrets or tokens.
+    </p>
+  </div>
+
+  <div class="form-actions">
+    <a class="btn btn-primary" href="{% url 'importer:local_settings' %}">
+      Open Settings (temporary)
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_setup_pick' %}">Choose a different CRM</a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Back to Connect hub</a>
+  </div>
+</section>
+{% endblock %}

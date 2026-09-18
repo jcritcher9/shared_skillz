@@ -1,0 +1,136 @@
+{% extends "importer/base.html" %}
+{% block title %}CRM query · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Query CRM records</h1>
+  <p class="lede">
+    Run a bounded, connection-bound CRM query. Results freeze into a snapshot
+    after you authorize the CRM_QUERY effect. Credentials stay on the API.
+  </p>
+
+  <p class="muted">
+    Need a connection first?
+    <a href="{% url 'importer:crm_connections' %}">Connect a CRM</a>
+  </p>
+
+  {% if connected_count == 0 %}
+  <div class="callout callout-warn">
+    <p>
+      No connected CRM account is available yet. Connect a provider first, then
+      return here to start a query.
+    </p>
+    <p>
+      <a class="button" href="{% url 'importer:crm_connections' %}">Connect a CRM</a>
+    </p>
+  </div>
+  {% else %}
+  <form method="post" class="stack-form" novalidate>
+    {% csrf_token %}
+    {{ form.form_token }}
+    {% if form.non_field_errors %}
+    <ul class="form-errors">
+      {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="field">
+      <label for="{{ form.connection_id.id_for_label }}">{{ form.connection_id.label }}</label>
+      {{ form.connection_id }}
+      {% if form.connection_id.errors %}<div class="field-errors">{{ form.connection_id.errors }}</div>{% endif %}
+    </div>
+
+    <fieldset class="field">
+      <legend>{{ form.mode.label }}</legend>
+      {{ form.mode }}
+      {% if form.mode.errors %}<div class="field-errors">{{ form.mode.errors }}</div>{% endif %}
+    </fieldset>
+
+    <div class="field">
+      <label for="{{ form.object_family.id_for_label }}">{{ form.object_family.label }}</label>
+      {{ form.object_family }}
+      {% if form.object_family.errors %}<div class="field-errors">{{ form.object_family.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.record_ids.id_for_label }}">{{ form.record_ids.label }}</label>
+      {{ form.record_ids }}
+      {% if form.record_ids.help_text %}<p class="field-help">{{ form.record_ids.help_text }}</p>{% endif %}
+      {% if form.record_ids.errors %}<div class="field-errors">{{ form.record_ids.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.template_id.id_for_label }}">{{ form.template_id.label }}</label>
+      {{ form.template_id }}
+      {% if form.template_id.help_text %}<p class="field-help">{{ form.template_id.help_text }}</p>{% endif %}
+      {% if form.template_id.errors %}<div class="field-errors">{{ form.template_id.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.template_version.id_for_label }}">{{ form.template_version.label }}</label>
+      {{ form.template_version }}
+      {% if form.template_version.errors %}<div class="field-errors">{{ form.template_version.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.template_params_json.id_for_label }}">{{ form.template_params_json.label }}</label>
+      {{ form.template_params_json }}
+      {% if form.template_params_json.help_text %}<p class="field-help">{{ form.template_params_json.help_text }}</p>{% endif %}
+      {% if form.template_params_json.errors %}<div class="field-errors">{{ form.template_params_json.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.field_projection.id_for_label }}">{{ form.field_projection.label }}</label>
+      {{ form.field_projection }}
+      {% if form.field_projection.help_text %}<p class="field-help">{{ form.field_projection.help_text }}</p>{% endif %}
+      {% if form.field_projection.errors %}<div class="field-errors">{{ form.field_projection.errors }}</div>{% endif %}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="button btn btn-primary">Start CRM query</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if queries %}
+  <h2>Your recent CRM queries</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Family</th>
+          <th>Mode</th>
+          <th>Status</th>
+          <th>Rows</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for query in queries %}
+        <tr>
+          <td>{{ query.provider_label|default:query.provider_key }}</td>
+          <td>{{ query.object_family }}</td>
+          <td>{{ query.mode }}</td>
+          <td>{{ query.status }}</td>
+          <td>{{ query.row_count|default:"—" }}</td>
+          <td><a href="{% url 'importer:crm_query_detail' query.query_id %}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <p class="muted">
+      Queries call <code>POST /v1/crm/queries</code> with an owner session header
+      and idempotency key (Q-CAT-B: not listed in the public product catalog).
+      After start, authorize <code>crm_query</code> execute on the workflow page.
+      Row pages use opaque public cursors over the frozen snapshot only.
+    </p>
+  </details>
+
+  <p><a href="{% url 'importer:landing' %}">Back to home</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "importer/base.html" %}
+{% block title %}Set up your import · EasyImports{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="eyebrow">Import setup</p>
+  <h1>Choose what you want to prepare</h1>
+  <p class="lead">
+    Tell EasyImports what kind of records you are working with and what you
+    want done. You do not need to pick an internal import type.
+  </p>
+</header>
+
+<section class="card setup-card">
+  <form method="post" class="customer-form" id="setup-intent-form">
+    {% csrf_token %}
+    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% if form.non_field_errors %}
+      <div class="message error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="field">
+      <label for="{{ form.operator_label.id_for_label }}">{{ form.operator_label.label }}</label>
+      {{ form.operator_label }}
+      {% if form.operator_label.help_text %}<p class="field-help">{{ form.operator_label.help_text }}</p>{% endif %}
+      {% if form.operator_label.errors %}<div class="field-errors">{{ form.operator_label.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.entity.id_for_label }}">{{ form.entity.label }}</label>
+      {{ form.entity }}
+      {% if form.entity.errors %}<div class="field-errors">{{ form.entity.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.operation.id_for_label }}">{{ form.operation.label }}</label>
+      {{ form.operation }}
+      {% if form.operation.errors %}<div class="field-errors">{{ form.operation.errors }}</div>{% endif %}
+    </div>
+
+    {# Phase 7A: CRM-data only when matching (D7/D8); no “not needed” choice. #}
+    <div
+      class="field"
+      data-setup-panel="reference_source"
+      {% if form.operation.value != "crm_matching" %}hidden{% endif %}
+    >
+      <label for="{{ form.reference_source.id_for_label }}">{{ form.reference_source.label }}</label>
+      {{ form.reference_source }}
+      {% if form.reference_source.help_text %}<p class="field-help">{{ form.reference_source.help_text }}</p>{% endif %}
+      {% if form.reference_source.errors %}<div class="field-errors">{{ form.reference_source.errors }}</div>{% endif %}
+    </div>
+
+    <div
+      class="field"
+      data-setup-panel="connection_id"
+      {% if form.operation.value != "crm_matching" or form.reference_source.value != "connected_crm" %}hidden{% endif %}
+    >
+      <label for="{{ form.connection_id.id_for_label }}">{{ form.connection_id.label }}</label>
+      {{ form.connection_id }}
+      {% if form.connection_id.help_text %}<p class="field-help">{{ form.connection_id.help_text }}</p>{% endif %}
+      {% if form.connection_id.errors %}<div class="field-errors">{{ form.connection_id.errors }}</div>{% endif %}
+      <p class="field-help">
+        <a href="{% url 'importer:crm_connections' %}">Manage CRM connections</a>
+      </p>
+    </div>
+
+    <div
+      class="field"
+      data-setup-panel="people_output"
+      {% if form.entity.value != "people" or form.operation.value != "clean_only" %}hidden{% endif %}
+    >
+      <label for="{{ form.people_output.id_for_label }}">{{ form.people_output.label }}</label>
+      {{ form.people_output }}
+      {% if form.people_output.help_text %}<p class="field-help">{{ form.people_output.help_text }}</p>{% endif %}
+      {% if form.people_output.errors %}<div class="field-errors">{{ form.people_output.errors }}</div>{% endif %}
+    </div>
+
+    {# CMX-1: vocabulary intent — independent of match and export. #}
+    <div class="field" data-setup-panel="vocabulary">
+      <label for="{{ form.vocabulary.id_for_label }}">{{ form.vocabulary.label }}</label>
+      {{ form.vocabulary }}
+      {% if form.vocabulary.help_text %}<p class="field-help">{{ form.vocabulary.help_text }}</p>{% endif %}
+      {% if form.vocabulary.errors %}<div class="field-errors">{{ form.vocabulary.errors }}</div>{% endif %}
+    </div>
+
+    {# Phase 7B / D6: target is internal (hidden field via form.hidden_fields). #}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Continue to files</button>
+    </div>
+  </form>
+</section>
+
+<details class="card run-details technical-details">
+  <summary><h2>Technical details</h2></summary>
+  <p class="muted">Internal identifiers used to keep this import connected to the correct workflow.</p>
+  <dl>
+    <dt>Session ID</dt><dd><code>{{ session.id }}</code></dd>
+    <dt>Setup revision</dt><dd><code>{{ session.setup_revision }}</code></dd>
+    <dt>Operator intent</dt>
+    <dd>
+      <code>
+        entity={{ session.setup_entity|default:"—" }},
+        operation={{ session.setup_operation|default:"—" }},
+        reference_source={{ session.setup_reference_source|default:"—" }},
+        people_output={{ session.setup_people_output|default:"—" }},
+        vocabulary={{ session.setup_vocabulary|default:"—" }}
+      </code>
+    </dd>
+    <dt>Derived product key</dt><dd><code>{{ session.product_key|default:"(not frozen until import starts)" }}</code></dd>
+    <dt>Target provider</dt><dd><code>{{ session.target_provider_id|default:"Not selected" }}</code></dd>
+  </dl>
+</details>
+
+<script>
+(function () {
+  const form = document.getElementById("setup-intent-form");
+  if (!form) return;
+  const entity = form.querySelector('[name="entity"]');
+  const operation = form.querySelector('[name="operation"]');
+  function panel(name) {
+    return form.querySelector('[data-setup-panel="' + name + '"]');
+  }
+  function sync() {
+    const op = operation ? operation.value : "";
+    const ent = entity ? entity.value : "";
+    const ref = form.querySelector('[name="reference_source"]');
+    const refVal = ref ? ref.value : "";
+    const refPanel = panel("reference_source");
+    const connPanel = panel("connection_id");
+    const peoplePanel = panel("people_output");
+    if (refPanel) refPanel.hidden = op !== "crm_matching";
+    if (connPanel) connPanel.hidden = !(op === "crm_matching" && refVal === "connected_crm");
+    if (peoplePanel) peoplePanel.hidden = !(ent === "people" && op === "clean_only");
+  }
+  ["change", "input"].forEach(function (evt) {
+    form.addEventListener(evt, sync);
+  });
+  sync();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "importer/base.html" %}
+{% block title %}Connect HubSpot portal · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Connect HubSpot portal</h1>
+  <p class="lede">
+    Your HubSpot application is registered on this device. Connect a portal to
+    finish setup. Private apps connect without leaving EasyImports; OAuth apps
+    may send you to HubSpot to authorize.
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li>Choose a CRM</li>
+    <li>Application credentials</li>
+    <li><strong>Connect portal</strong></li>
+  </ol>
+
+  <dl class="kv" style="margin-bottom: 1.2rem;">
+    {% if draft.label %}
+    <dt>App label</dt><dd>{{ draft.label }}</dd>
+    {% endif %}
+    {% if draft.auth_mode %}
+    <dt>Auth mode</dt><dd>{{ draft.auth_mode }}</dd>
+    {% endif %}
+    {% if draft.expected_hub_id %}
+    <dt>Expected hub id</dt><dd><code>{{ draft.expected_hub_id }}</code></dd>
+    {% endif %}
+    {% if draft.auth_mode == "oauth" and draft.client_id %}
+    <dt>Client ID</dt><dd><code>{{ draft.client_id }}</code></dd>
+    {% endif %}
+    {% if draft.auth_mode == "oauth" %}
+    <dt>Callback</dt><dd><code>{{ callback_uri }}</code></dd>
+    {% endif %}
+  </dl>
+  <p class="muted small">
+    Access tokens and client secrets are never shown here. To rotate them, use
+    Edit application or Device storage &amp; advanced (ops).
+  </p>
+
+  {% include "importer/_crm_reclaim_form.html" %}
+
+  <form
+    method="post"
+    action="{% url 'importer:crm_setup_hubspot_connect_submit' %}"
+    class="form-actions"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ connect_token }}" />
+    <button type="submit" class="btn btn-primary btn-lg">Connect HubSpot portal</button>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_setup_hubspot' %}?edit=1">
+      Edit application
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

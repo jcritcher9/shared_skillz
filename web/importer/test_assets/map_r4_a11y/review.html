@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MAP-R4 a11y fixture · EasyImports</title>
+  <style>
+    /* Minimal layout so visibility checks work without full app.css */
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0);
+      white-space: nowrap; border: 0;
+    }
+    .map-r4-enhanced .mapping-fallback-select {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0);
+      white-space: nowrap; border: 0;
+      pointer-events: none;
+    }
+    .tab.active { font-weight: 700; }
+    dialog { border: 1px solid #333; padding: 1rem; max-width: 28rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card mapping-review-card" id="mapping-review" data-map-r4="1">
+      <div class="mapping-toolbar" role="toolbar" aria-label="Filter and search columns">
+        <div class="mapping-filters" role="group" aria-label="Column filters">
+          <button type="button" class="tab active" data-filter="all" aria-pressed="true">
+            All <span class="tab-count">3</span>
+          </button>
+          <button type="button" class="tab review has-rows" data-filter="needs_review" aria-pressed="false">
+            Needs review <span class="tab-count">1</span>
+          </button>
+          <button type="button" class="tab" data-filter="mapped" aria-pressed="false">
+            Mapped <span class="tab-count">2</span>
+          </button>
+          <button type="button" class="tab" data-filter="ignored" aria-pressed="false">
+            Ignored <span class="tab-count">0</span>
+          </button>
+        </div>
+        <div class="mapping-search-wrap">
+          <label class="visually-hidden" for="mapping-column-search">Search columns</label>
+          <input type="search" id="mapping-column-search" class="mapping-search" placeholder="Search columns…" autocomplete="off" disabled>
+        </div>
+      </div>
+
+      <p class="mapping-live-region visually-hidden" id="mapping-live" aria-live="polite" aria-atomic="true"></p>
+
+      <form method="post" id="mapping-review-form" class="customer-form mapping-review-form" data-plan-digest="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" data-system-ignore="system:ignore">
+        <div class="table-scroll mapping-table-scroll">
+          <table class="data-table compact mapping-table" id="mapping-table">
+            <caption class="visually-hidden">Source columns and destination mappings</caption>
+            <thead>
+              <tr>
+                <th scope="col">Select</th>
+                <th scope="col">Action</th>
+                <th scope="col">Maps to</th>
+                <th scope="col">Source column</th>
+                <th scope="col">Example 1</th>
+                <th scope="col">Example 2</th>
+                <th scope="col">Example 3</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr id="mapping-row-0" class="mapping-row mapping-row-mapped" data-ordinal="0" data-filter="mapped" data-disposition="mapped" data-source-header="account_name" data-source-label="account_name" data-choice-id="catalog:account:name" data-suggested-id="" data-status-label="Matched automatically">
+                <td class="col-bulk"><span class="muted" aria-hidden="true">·</span></td>
+                <td class="col-action">
+                  <button type="button" class="btn btn-small mapping-action-btn js-only" data-open-picker data-ordinal="0" aria-haspopup="dialog" hidden>Change</button>
+                  <span class="mapping-status-pill status-mapped">Matched automatically</span>
+                </td>
+                <td class="col-maps">
+                  <div class="maps-to-cell"><strong class="maps-to-label" data-maps-label>Account name</strong></div>
+                  <label class="mapping-fallback-select">
+                    <span class="visually-hidden">Map account_name to</span>
+                    <select name="choice_0" id="choice_0" data-ordinal="0" class="mapping-choice-select">
+                      <option value="">— Needs review —</option>
+                      <option value="system:ignore">Ignore column</option>
+                      <option value="catalog:account:name" selected>Account name</option>
+                      <option value="catalog:account:website">Website</option>
+                    </select>
+                  </label>
+                </td>
+                <td class="col-source"><span class="source-header-text">account_name</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">3R8</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">5Dm</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">—</span></td>
+              </tr>
+              <tr id="mapping-row-1" class="mapping-row mapping-row-mapped" data-ordinal="1" data-filter="mapped" data-disposition="mapped" data-source-header="website" data-source-label="website" data-choice-id="catalog:account:website" data-suggested-id="" data-status-label="Matched automatically">
+                <td class="col-bulk"><span class="muted" aria-hidden="true">·</span></td>
+                <td class="col-action">
+                  <button type="button" class="btn btn-small mapping-action-btn js-only" data-open-picker data-ordinal="1" aria-haspopup="dialog" hidden>Change</button>
+                  <span class="mapping-status-pill status-mapped">Matched automatically</span>
+                </td>
+                <td class="col-maps">
+                  <div class="maps-to-cell"><strong class="maps-to-label" data-maps-label>Website</strong></div>
+                  <label class="mapping-fallback-select">
+                    <span class="visually-hidden">Map website to</span>
+                    <select name="choice_1" id="choice_1" data-ordinal="1" class="mapping-choice-select">
+                      <option value="">— Needs review —</option>
+                      <option value="system:ignore">Ignore column</option>
+                      <option value="catalog:account:name">Account name</option>
+                      <option value="catalog:account:website" selected>Website</option>
+                    </select>
+                  </label>
+                </td>
+                <td class="col-source"><span class="source-header-text">website</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">a.example</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">b.example</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">—</span></td>
+              </tr>
+              <tr id="mapping-row-2" class="mapping-row mapping-row-needs_review" data-ordinal="2" data-filter="needs_review" data-disposition="unresolved" data-source-header="temporary_notes" data-source-label="temporary_notes" data-choice-id="" data-suggested-id="" data-status-label="Needs review">
+                <td class="col-bulk">
+                  <label class="bulk-check">
+                    <input type="checkbox" name="bulk_ordinal" value="2" class="mapping-bulk-checkbox">
+                    <span class="visually-hidden">Select temporary_notes for bulk ignore</span>
+                  </label>
+                </td>
+                <td class="col-action">
+                  <button type="button" class="btn btn-small mapping-action-btn js-only" data-open-picker data-ordinal="2" aria-haspopup="dialog" hidden>Change</button>
+                  <span class="mapping-status-pill status-needs_review">Needs review</span>
+                </td>
+                <td class="col-maps">
+                  <div class="maps-to-cell"><strong class="maps-to-label" data-maps-label>Needs review</strong></div>
+                  <label class="mapping-fallback-select">
+                    <span class="visually-hidden">Map temporary_notes to</span>
+                    <select name="choice_2" id="choice_2" data-ordinal="2" class="mapping-choice-select">
+                      <option value="">— Needs review —</option>
+                      <option value="system:ignore">Ignore column</option>
+                      <option value="catalog:account:name">Account name</option>
+                      <option value="catalog:account:website">Website</option>
+                    </select>
+                  </label>
+                </td>
+                <td class="col-source"><span class="source-header-text">temporary_notes</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">—</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">—</span></td>
+                <td class="col-ex sample-cell"><span class="sample-text">—</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mapping-actions form-actions">
+          <button class="btn" type="submit" name="action" value="save_draft">Save draft</button>
+          <button class="btn btn-primary" type="submit" name="action" value="confirm_mapping" disabled aria-disabled="true">Confirm mapping &amp; continue</button>
+        </div>
+      </form>
+    </section>
+
+    <dialog id="mapping-field-picker" class="mapping-picker-dialog" aria-labelledby="mapping-picker-title">
+      <form method="dialog" id="mapping-picker-form" class="mapping-picker-form">
+        <header class="mapping-picker-head">
+          <h2 id="mapping-picker-title">Edit mapping</h2>
+          <p class="muted" id="mapping-picker-source">Source column</p>
+          <p class="mapping-picker-examples muted small" id="mapping-picker-examples"></p>
+        </header>
+        <fieldset class="mapping-picker-mode">
+          <legend class="visually-hidden">Map as</legend>
+          <label class="radio-pill"><input type="radio" name="picker_mode" value="field" checked> Target field</label>
+          <label class="radio-pill"><input type="radio" name="picker_mode" value="ignore"> Ignore column</label>
+        </fieldset>
+        <div id="mapping-picker-field-panel">
+          <label class="field" for="mapping-picker-search">
+            <span>Find a field</span>
+            <input type="search" id="mapping-picker-search" autocomplete="off" placeholder="Search fields…">
+          </label>
+          <div id="mapping-picker-list" class="mapping-picker-list" role="listbox" aria-label="Destination fields" tabindex="-1"></div>
+        </div>
+        <p id="mapping-picker-ignore-panel" class="mapping-picker-ignore-note" hidden>This column will not be imported.</p>
+        <footer class="mapping-picker-actions form-actions">
+          <button type="submit" value="cancel" class="btn" id="mapping-picker-cancel">Cancel</button>
+          <button type="submit" value="apply" class="btn btn-primary" id="mapping-picker-apply">Apply mapping</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script type="application/json" id="mapping-choices-data">[{"mapping_choice_id":"system:ignore","label":"Ignore column","object_scope":"","is_ignore":true,"search_aliases":["ignore","skip"]},{"mapping_choice_id":"catalog:account:name","label":"Account name","object_scope":"Account","is_ignore":false,"search_aliases":["account name","company name","name"]},{"mapping_choice_id":"catalog:account:website","label":"Website","object_scope":"Account","is_ignore":false,"search_aliases":["website","url","homepage","home page","company website"]}]</script>
+    <script src="../../static/importer/js/column_mapping_review.js"></script>
+  </main>
+</body>
+</html>

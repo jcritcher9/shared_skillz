@@ -1,0 +1,113 @@
+{% extends "importer/base.html" %}
+{% block title %}Map your columns · EasyImports{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="eyebrow">Column mapping preflight</p>
+  <h1>What should these columns become?</h1>
+  <p class="lead">
+    EasyImports pre-fills destinations from your uploaded headers.
+    You only resolve gaps — one mapping step, no intermediate field jargon.
+  </p>
+</header>
+
+<section class="card setup-card">
+  <h2>Upload schema</h2>
+  <p>
+    File: <strong>{{ source.original_name }}</strong>
+    {% if source.api_upload_id %}<span class="muted">({{ source.api_upload_id }})</span>{% endif %}
+  </p>
+  <ul>
+    {% for header in headers %}
+      <li><code>{{ header }}</code></li>
+    {% empty %}
+      <li class="message error">No headers on this upload.</li>
+    {% endfor %}
+  </ul>
+
+  <h2>Destination</h2>
+  {% if destination_error %}
+    <p class="message error">{{ destination_error }}</p>
+  {% endif %}
+  {% if mapping_blocked %}
+    <p class="message error">
+      Mapping is blocked until destination setup is fixed. EasyImports will not
+      invent a different catalog or CRM target.
+    </p>
+    <div class="form-actions">
+      <a class="btn btn-primary" href="{% url 'importer:product' session_id=session.id %}">Return to setup</a>
+      <a class="btn" href="{% url 'importer:upload' session_id=session.id %}">Back to files</a>
+    </div>
+  {% elif destination_mode == "crm" %}
+    <p>
+      CRM connection <code>{{ destination.connection_id }}</code>
+      · provider <code>{{ destination.provider_key }}</code>
+      · {{ destination.object_keys|join:", " }}
+      · {{ destination.operation_key }}
+    </p>
+    {% if destination.catalog_id %}
+      <p class="muted">Catalog id: <code>{{ destination.catalog_id }}</code></p>
+    {% endif %}
+  {% else %}
+    <p>EasyImports field catalog (no CRM selected for this import).</p>
+    {% if destination.catalog_id %}
+      <p class="muted">Catalog: <code>{{ destination.catalog_id }}</code></p>
+    {% endif %}
+  {% endif %}
+
+  {% if plan_create_mutation and plan_create_mutation.state == "unknown" %}
+  <div class="message warning">
+    <strong>EasyImports needs to confirm whether mapping started.</strong>
+    Retry the same saved mapping action. Your file stays uploaded.
+  </div>
+  <form method="post" action="{% url 'importer:retry_mutation' session.id plan_create_mutation.id %}">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ plan_create_retry_token }}">
+    {% if plan_create_mutation.retry_available %}
+      <button class="btn btn-primary" type="submit">Retry saved mapping action</button>
+    {% else %}
+      <span class="small muted">Please wait a moment before trying again.</span>
+    {% endif %}
+  </form>
+  {% elif plan_create_mutation and plan_create_mutation.state == "pending" %}
+  <div class="message warning" data-mutation-pending="1" data-mutation-kind="column_mapping_plan_create">
+    <strong>EasyImports is still creating the mapping plan.</strong>
+    Checking again continues the same action. Your file stays uploaded.
+  </div>
+  <form method="post" class="customer-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Check this mapping</button>
+      <a class="btn" href="{% url 'importer:upload' session_id=session.id %}">Back to files</a>
+    </div>
+  </form>
+  {% elif plan_create_ack_token %}
+  <div class="message error">
+    <strong>We couldn't create this mapping plan.</strong>
+    {{ plan_create_mutation.error_message }}
+  </div>
+  <form method="post" action="{% url 'importer:acknowledge_rejection' session.id plan_create_mutation.id %}">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ plan_create_ack_token }}">
+    <button class="btn btn-ghost" type="submit">Acknowledge and try mapping again</button>
+  </form>
+  {% elif not mapping_blocked %}
+  <form method="post" class="customer-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    {% if matching_confirmed %}
+    <input type="hidden" name="action" value="map_again">
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Map again</button>
+      <a class="btn" href="{% url 'importer:upload' session_id=session.id %}">Back to files</a>
+    </div>
+    {% else %}
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Auto-detect and review</button>
+      <a class="btn" href="{% url 'importer:upload' session_id=session.id %}">Back to files</a>
+    </div>
+    {% endif %}
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

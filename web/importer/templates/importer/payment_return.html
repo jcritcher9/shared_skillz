@@ -1,0 +1,38 @@
+{% extends "importer/base.html" %}
+
+{% block title %}Thank you &middot; EasyImports{% endblock %}
+
+{% block content %}
+<section class="card return-card">
+  {% if payment and payment.status == "completed" %}
+    <div class="return-icon ok">&#10003;</div>
+    <h1>Payment complete</h1>
+    <p class="muted">Thanks for purchasing {{ payment.plan_name|default:plan_name }}.</p>
+  {% elif payment and payment.status == "pending" %}
+    <div class="return-icon pending">&#8230;</div>
+    <h1>Payment pending</h1>
+    <p class="muted">
+      Your order was created and is awaiting confirmation from WooCommerce.
+      This page will reflect the final status once payment settles.
+    </p>
+  {% elif payment and payment.status == "failed" %}
+    <div class="return-icon failed">&times;</div>
+    <h1>Payment not completed</h1>
+    <p class="muted">The order didn't go through. You can try again from the pricing page.</p>
+  {% else %}
+    <div class="return-icon">&#8226;</div>
+    <h1>Thanks for stopping by</h1>
+    <p class="muted">We couldn't match this visit to an order, but any completed
+      WooCommerce payment is safely recorded in your store.</p>
+  {% endif %}
+
+  {% if payment and payment.wc_order_id %}
+  <p class="muted small mono">WooCommerce order #{{ payment.wc_order_id }}</p>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'importer:landing' %}" class="btn btn-primary">Start an import</a>
+    <a href="{% url 'importer:pricing' %}" class="btn">Back to pricing</a>
+  </div>
+</section>
+{% endblock %}

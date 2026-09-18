@@ -1,0 +1,57 @@
+{% extends "importer/base.html" %}
+{% block title %}Confirm CRM removal · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Stop dependent analyses and remove this connection?</h1>
+  <p>
+    EasyImports will stop each loadable unfinished analysis, preserve analyses
+    that already finished, quarantine records whose stopped state cannot be
+    recorded safely, and then remove the disconnected CRM connection.
+  </p>
+  {% if preview.runs %}
+  <h2>Associated analyses</h2>
+  <ul class="plain-list">
+    {% for run in preview.runs %}
+    <li>
+      <strong>{{ run.run_id }}</strong> — {{ run.run_status }}
+      (revision {{ run.checkpoint_revision|default:"unavailable" }})
+      <ul>
+        {% for dependent in run.dependents %}
+        <li>{{ dependent.type }}: {{ dependent.id }}</li>
+        {% endfor %}
+      </ul>
+      {% if run.remote_outcome == "unknown" %}
+      <p class="callout callout-warn">
+        A CRM write may already have been sent. EasyImports cannot recall it,
+        and the remote outcome may be uncertain.
+      </p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if preview.has_unloadable_runs %}
+  <p class="callout callout-warn">
+    These records have no loadable analysis checkpoint. A CRM write may already
+    have been sent, so the remote outcome may be uncertain.
+  </p>
+  {% endif %}
+  {% endif %}
+  {% if preview.orphaned_dependents %}
+  <h2>Records without a loadable analysis</h2>
+  <ul class="plain-list">
+    {% for dependent in preview.orphaned_dependents %}
+    <li>{{ dependent.type }}: {{ dependent.id }} — will be quarantined</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="{% url 'importer:crm_connection_remove_with_dependents' connection_id %}">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}" />
+    <input type="hidden" name="confirmation_digest" value="{{ preview.confirmation_digest }}" />
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Stop analyses and remove connection</button>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

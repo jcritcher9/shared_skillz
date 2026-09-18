@@ -1,0 +1,31 @@
+{% extends "importer/base.html" %}
+{% block title %}Practice CRM · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Connect Practice CRM</h1>
+  <p class="lede">
+    Practice CRM is a local demo provider. No app credentials or secrets are
+    required. Connecting uses the same journaled Connect path as the hub.
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li>Choose a CRM</li>
+    <li><strong>Provider steps</strong></li>
+    <li>Connect &amp; finish</li>
+  </ol>
+
+  <p class="muted">Selected: <strong>{{ draft.provider_label|default:"Practice CRM" }}</strong></p>
+
+  <form
+    method="post"
+    action="{% url 'importer:crm_setup_practice_connect' %}"
+    class="form-actions"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ connect_token }}" />
+    <button type="submit" class="btn btn-primary btn-lg">Connect practice CRM</button>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_setup_pick' %}">Back</a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "importer/base.html" %}
+{% block title %}Connect Salesforce org · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Connect Salesforce org</h1>
+  <p class="lede">
+    Your Connected App is registered on this device. Connect an org to finish
+    setup. You will be sent to Salesforce to authorize, then return to
+    EasyImports.
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li>Choose a CRM</li>
+    <li>Connected App credentials</li>
+    <li><strong>Connect org</strong></li>
+  </ol>
+
+  <dl class="kv" style="margin-bottom: 1.2rem;">
+    {% if draft.label %}
+    <dt>App label</dt><dd>{{ draft.label }}</dd>
+    {% endif %}
+    {% if draft.login_environment %}
+    <dt>Environment</dt><dd>{{ draft.login_environment }}</dd>
+    {% endif %}
+    {% if draft.client_id %}
+    <dt>Client ID</dt><dd><code>{{ draft.client_id }}</code></dd>
+    {% endif %}
+    <dt>Callback</dt><dd><code>{{ callback_uri }}</code></dd>
+  </dl>
+  <p class="muted small">
+    Client secrets are never shown here. To rotate secrets, use Edit Connected
+    App or Device storage &amp; advanced (ops).
+  </p>
+
+  <form
+    method="post"
+    action="{% url 'importer:crm_setup_salesforce_connect_submit' %}"
+    class="form-actions"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ connect_token }}" />
+    <button type="submit" class="btn btn-primary btn-lg">Connect Salesforce org</button>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_setup_salesforce' %}?edit=1">
+      Edit Connected App
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "importer/base.html" %}
+{% block title %}HubSpot setup · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{% if edit_mode %}Edit HubSpot application{% else %}Set up HubSpot{% endif %}</h1>
+  <p class="lede">
+    {% if edit_mode %}
+    Update HubSpot application credentials on this device. Saving replaces the
+    prior registration (one app per provider). Secrets are vaulted by the API —
+    Django never keeps tokens or client secrets.
+    {% else %}
+    Register a HubSpot private app (recommended) or OAuth app on this device,
+    then connect your portal. Secrets are stored by the API vault — Django
+    never keeps tokens or client secrets.
+    {% endif %}
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li>Choose a CRM</li>
+    <li><strong>Application credentials</strong></li>
+    <li>Connect portal</li>
+  </ol>
+
+  {% if stuck_registration_put and start_over_form_token %}
+  <div class="callout" style="margin-bottom: 1rem;" role="status">
+    <p>
+      <strong>Stuck HubSpot registration</strong> — a prior save ended UNKNOWN.
+      EasyImports will check whether credentials already committed before clearing
+      the journal pin. Cookie clearing is not required.
+    </p>
+    <form
+      method="post"
+      action="{% url 'importer:registration_start_over' 'hubspot' %}"
+      class="stack"
+    >
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ start_over_form_token }}" />
+      <input type="hidden" name="next" value="{% url 'importer:crm_setup_hubspot' %}" />
+      <button type="submit" class="btn btn-primary">
+        Start over with different credentials
+      </button>
+    </form>
+  </div>
+  {% endif %}
+  {% include "importer/_api_technical_details.html" with api_technical=api_technical %}
+
+  <h2>Private app checklist (recommended)</h2>
+  <ul class="muted">
+    <li>Create a private app in HubSpot with the scopes EasyImports needs.</li>
+    <li>Copy the access token and your hub / portal id.</li>
+    <li>Paste them below. Tokens are never re-displayed after save.</li>
+  </ul>
+
+  <h2>OAuth app alternate</h2>
+  <ul class="muted">
+    <li>Create a public HubSpot app with OAuth.</li>
+    <li>Set the callback URL exactly as below.</li>
+    <li>Copy the client ID and client secret.</li>
+  </ul>
+  <p>
+    Callback URL (OAuth only — paste into HubSpot, not editable):
+    <code>{{ callback_uri }}</code>
+  </p>
+
+  <form
+    method="post"
+    action="{% url 'importer:crm_setup_hubspot_save' %}"
+    class="stack"
+    autocomplete="off"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ save_token }}" />
+
+    <div class="field">
+      <label for="hs-label">Label</label>
+      <input
+        id="hs-label"
+        type="text"
+        name="label"
+        required
+        placeholder="Work HubSpot"
+        value="{{ draft.label }}"
+      />
+    </div>
+
+    <div class="field">
+      <label for="hs-auth-mode">Auth mode</label>
+      <select id="hs-auth-mode" name="auth_mode" required>
+        {% for value, label in auth_modes %}
+        <option
+          value="{{ value }}"
+          {% if draft.auth_mode == value %}selected{% elif not draft.auth_mode and value == "private_app" %}selected{% endif %}
+        >
+          {{ label }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="hs-hub-id">Expected hub / portal id</label>
+      <input
+        id="hs-hub-id"
+        type="text"
+        name="expected_hub_id"
+        placeholder="12345678"
+        value="{{ draft.expected_hub_id }}"
+      />
+      <p class="field-help muted">
+        Required for private app. Optional binding for OAuth.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="hs-access-token">Access token (private app)</label>
+      <input
+        id="hs-access-token"
+        type="password"
+        name="access_token"
+        autocomplete="new-password"
+      />
+      <p class="field-help muted">
+        Required when auth mode is private app. Never stored in the browser
+        draft or Django durable journal.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="hs-client-id">Client ID (OAuth)</label>
+      <input
+        id="hs-client-id"
+        type="text"
+        name="client_id"
+        autocomplete="off"
+        value="{{ draft.client_id }}"
+      />
+    </div>
+
+    <div class="field">
+      <label for="hs-client-secret">Client secret (OAuth)</label>
+      <input
+        id="hs-client-secret"
+        type="password"
+        name="client_secret"
+        autocomplete="new-password"
+      />
+      <p class="field-help muted">
+        Required when auth mode is OAuth. Vaulted by the API only.
+      </p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save HubSpot application</button>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_setup_pick' %}">Back</a>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

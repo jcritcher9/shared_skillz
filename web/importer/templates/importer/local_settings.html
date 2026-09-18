@@ -1,0 +1,242 @@
+{% extends "importer/base.html" %}
+{% block title %}Device storage & advanced · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Device storage &amp; advanced</h1>
+  <p class="lede">
+    Optional device storage location and advanced CRM app ops. Primary CRM
+    setup lives under
+    <a href="{% url 'importer:crm_connections' %}">Connect CRM</a>
+    (guided wizard). Secrets are stored by the API (not Django). Available only
+    from this machine (loopback).
+  </p>
+
+  {% if error %}
+  <div class="banner banner-error" role="alert">{{ error }}</div>
+  {% endif %}
+  {% include "importer/_api_technical_details.html" with api_technical=api_technical %}
+
+  {% if stuck_registration_puts %}
+  <div class="callout" style="margin: 1rem 0;" role="status">
+    <p>
+      <strong>Stuck registration attempt</strong> — an earlier save had an uncertain
+      API outcome (UNKNOWN). Cookie clearing is not required. Use
+      <strong>Start over with different credentials</strong> after EasyImports checks
+      whether the app registration already committed.
+    </p>
+    {% for stuck in stuck_registration_puts %}
+    <form
+      method="post"
+      action="{% url 'importer:registration_start_over' stuck.provider_key %}"
+      class="stack"
+      style="margin-top: 0.75rem;"
+    >
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ stuck.start_over_form_token }}" />
+      <input type="hidden" name="next" value="{% url 'importer:local_settings' %}" />
+      <p class="muted small">
+        Provider: <strong>{{ stuck.provider_key }}</strong>
+        · generation {{ stuck.generation }}
+        {% if stuck.http_status %}· HTTP {{ stuck.http_status }}{% endif %}
+      </p>
+      <button type="submit" class="btn btn-primary">
+        Start over with different credentials ({{ stuck.provider_key }})
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p style="margin-bottom: 1.2rem;">
+    <a class="btn btn-primary" href="{% url 'importer:crm_connections' %}">
+      Open Connect CRM
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_setup_start' %}">
+      Set up new CRM connection
+    </a>
+  </p>
+
+  <h2>Storage</h2>
+  <p class="muted small">
+    Default data root is created automatically under this device’s local app
+    data. You do not need to set a path for normal CRM setup.
+  </p>
+  {% if storage %}
+  <dl class="kv">
+    <dt>Data root</dt><dd><code>{{ storage.data_root }}</code></dd>
+    <dt>Bootstrap</dt><dd><code>{{ storage.bootstrap_path }}</code></dd>
+    <dt>Default location?</dt><dd>{{ storage.is_default_data_root }}</dd>
+    <dt>Can change?</dt><dd>{{ storage.can_change_location }}</dd>
+  </dl>
+  {% if storage.change_blocked_reason %}
+  <p class="muted">{{ storage.change_blocked_reason }}</p>
+  {% endif %}
+  {% if storage.vault_health %}
+  <details class="technical-details" style="margin: 0.8rem 0;">
+    <summary>Secret vault health</summary>
+    <dl class="kv">
+      <dt>Indexed secrets</dt><dd>{{ storage.vault_health.indexed_key_count }}</dd>
+      <dt>Secrets that could not be decrypted</dt><dd>{{ storage.vault_health.decrypt_failed_count }}</dd>
+    </dl>
+    <p class="muted small">Counts only; secret names, values, paths, and error text are not shown.</p>
+  </details>
+  {% endif %}
+  {% if storage.can_change_location %}
+  <form method="post" action="{% url 'importer:local_settings_storage' %}" class="stack">
+    {% csrf_token %}
+    <label>Data root (absolute path)
+      <input type="text" name="data_root" value="{{ storage.data_root }}" required>
+    </label>
+    <div class="actions">
+      <button type="submit">Save location (restart API after)</button>
+      <button type="submit" name="restore_default" value="1">Restore default (restart API after)</button>
+    </div>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  <h2>CRM applications on this device</h2>
+  <p class="muted">
+    Safe summary only (no secrets). Prefer
+    <a href="{% url 'importer:crm_connections' %}">Connect CRM → Manage app</a>
+    or the guided wizard to add or update credentials.
+  </p>
+  {% if registrations %}
+  <ul class="plain-list">
+    {% for reg in registrations %}
+    <li>
+      <strong>{{ reg.label }}</strong> ({{ reg.provider_key }}) —
+      {{ reg.login_environment }}, secret configured: {{ reg.client_secret_configured }},
+      client …{{ reg.client_id_suffix }}
+      {% if reg.provider_key == "salesforce" %}
+      <a class="btn btn-sm btn-ghost" href="{% url 'importer:crm_setup_salesforce' %}?edit=1">Manage in wizard</a>
+      {% elif reg.provider_key == "hubspot" %}
+      <a class="btn btn-sm btn-ghost" href="{% url 'importer:crm_setup_hubspot' %}?edit=1">Manage in wizard</a>
+      {% endif %}
+      <form method="post" action="{% url 'importer:local_settings_remove_registration' reg.provider_key %}" class="inline" onsubmit="return confirm('Remove this CRM application registration? Connected orgs must be disconnected first.');">
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ reg.delete_form_token }}">
+        <input type="hidden" name="confirm" value="1">
+        <button type="submit" class="danger">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">
+    No CRM applications registered yet.
+    <a href="{% url 'importer:crm_setup_start' %}">Set up a CRM connection</a>
+    is the primary path.
+  </p>
+  {% endif %}
+
+  <details class="advanced-registration" style="margin-top: 1.6rem;">
+    <summary style="cursor: pointer; font-weight: 600;">
+      Advanced CRM app registration (ops)
+    </summary>
+    <p class="muted" style="margin-top: 0.75rem;">
+      Dual-run forms for local ops only. Guided Connect CRM setup is preferred.
+      Paste the callback that matches the CRM app you are registering (exact match):
+    </p>
+    <ul class="muted" style="margin-top: 0.5rem;">
+      <li>Salesforce OAuth callback:
+        <code>{{ salesforce_redirect_uri }}</code>
+      </li>
+      <li>HubSpot OAuth callback:
+        <code>{{ hubspot_redirect_uri }}</code>
+      </li>
+    </ul>
+
+    <h3>Add / update Salesforce Connected App</h3>
+    <form method="post" action="{% url 'importer:local_settings_salesforce_registration' %}" class="stack">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ sf_put_form_token }}">
+      <label>Label <input type="text" name="label" required placeholder="Work sandbox"></label>
+      <label>Login environment
+        <select name="login_environment" required>
+          <option value="production">production (login.salesforce.com)</option>
+          <option value="sandbox">sandbox (test.salesforce.com)</option>
+        </select>
+      </label>
+      <label>Client ID <input type="text" name="client_id" required autocomplete="off"></label>
+      <label>Client secret
+        <input type="password" name="client_secret" required autocomplete="new-password">
+      </label>
+      <label>My Domain host (optional)
+        <input type="text" name="my_domain_host" placeholder="mycompany.my.salesforce.com">
+      </label>
+      <label>Expected org Id (optional)
+        <input type="text" name="expected_org_id" placeholder="00D…">
+      </label>
+      <div class="actions">
+        <button type="submit">Save Salesforce registration</button>
+      </div>
+    </form>
+
+    <h3>Rotate Salesforce client secret</h3>
+    <p class="muted">Disconnect active Salesforce connections before rotating.</p>
+    <form method="post" action="{% url 'importer:local_settings_rotate_secret' %}" class="stack">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ sf_rotate_form_token }}">
+      <label>New client secret
+        <input type="password" name="client_secret" required autocomplete="new-password">
+      </label>
+      <div class="actions">
+        <button type="submit">Rotate secret</button>
+      </div>
+    </form>
+
+    <h3>Add / update HubSpot application</h3>
+    <p class="muted">
+      Private app uses an access token (stored in the API secret vault). OAuth uses a
+      HubSpot public app client id/secret.
+    </p>
+    <form method="post" action="{% url 'importer:local_settings_hubspot_registration' %}" class="stack">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ hs_put_form_token }}">
+      <label>Label <input type="text" name="label" required placeholder="Work HubSpot"></label>
+      <label>Auth mode
+        <select name="auth_mode" required>
+          <option value="private_app">private app (access token)</option>
+          <option value="oauth">OAuth app</option>
+        </select>
+      </label>
+      <label>Expected hub / portal id (required for private app)
+        <input type="text" name="expected_hub_id" placeholder="12345678">
+      </label>
+      <label>Access token (private app)
+        <input type="password" name="access_token" autocomplete="new-password">
+      </label>
+      <label>Client ID (OAuth) <input type="text" name="client_id" autocomplete="off"></label>
+      <label>Client secret (OAuth)
+        <input type="password" name="client_secret" autocomplete="new-password">
+      </label>
+      <div class="actions">
+        <button type="submit">Save HubSpot registration</button>
+      </div>
+    </form>
+
+    <h3>Rotate HubSpot secret</h3>
+    <p class="muted">Disconnect active HubSpot connections before rotating.</p>
+    <form method="post" action="{% url 'importer:local_settings_rotate_hubspot_secret' %}" class="stack">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ hs_rotate_form_token }}">
+      <label>Auth mode for this registration
+        <select name="auth_mode" required>
+          <option value="private_app">private app (access token)</option>
+          <option value="oauth">OAuth client secret</option>
+        </select>
+      </label>
+      <label>New access token (private app)
+        <input type="password" name="access_token" autocomplete="new-password">
+      </label>
+      <label>New client secret (OAuth)
+        <input type="password" name="client_secret" autocomplete="new-password">
+      </label>
+      <div class="actions">
+        <button type="submit">Rotate HubSpot secret</button>
+      </div>
+    </form>
+  </details>
+</section>
+{% endblock %}

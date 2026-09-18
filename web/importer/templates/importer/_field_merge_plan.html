@@ -1,0 +1,77 @@
+{# Display-only field merge plan (1B-API public frame). No submit controls. #}
+{% if field_merge and field_merge.present %}
+<section class="field-merge-plan" data-field-merge-plan>
+  <h3 class="field-label">Field decisions for survivor</h3>
+  {% if field_merge.survivor_id %}
+  <p class="muted">
+    Projected survivor: <code>{{ field_merge.survivor_id }}</code>
+  </p>
+  {% endif %}
+  <p class="callout callout-ok" data-field-fill-copy>
+    {{ field_merge.empty_fill_sentence }}
+  </p>
+  {% if field_merge.execution_intent %}
+  <p class="muted" data-field-merge-intent>
+    Technical intent: <code>{{ field_merge.execution_intent }}</code>
+  </p>
+  {% endif %}
+
+  {% if field_merge.field_decisions %}
+  <div class="table-wrap">
+    <table class="data-table field-merge-decisions">
+      <thead>
+        <tr>
+          <th scope="col">Field</th>
+          <th scope="col">After merge</th>
+          <th scope="col">Comes from</th>
+          <th scope="col">What happens</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in field_merge.field_decisions %}
+        <tr>
+          <td><code>{{ row.logical_field_key }}</code></td>
+          <td>{% if row.value is None %}<span class="muted">—</span>{% else %}{{ row.value }}{% endif %}</td>
+          <td>{% if row.source_member_id %}<code>{{ row.source_member_id }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>
+            {{ row.merge_rule_label }}
+            {% if not row.overwrites_existing_value %}
+            <span class="muted"> · {{ row.overwrite_label }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted" data-field-fill-empty-decisions>{{ field_merge.empty_decisions_copy }}</p>
+  {% endif %}
+
+  {% if field_merge.merge_conflicts %}
+  <h3 class="field-label">Field merge conflicts</h3>
+  <ul class="review-evidence-list" data-field-merge-conflicts>
+    {% for row in field_merge.merge_conflicts %}
+    <li>
+      {% if row.items %}
+        {% for key, value in row.items %}
+          <span class="muted">{{ key }}:</span> {{ value }}{% if not forloop.last %}; {% endif %}
+        {% endfor %}
+      {% else %}
+        {{ row }}
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if field_merge.consolidate_pairs %}
+  <p class="muted" data-field-merge-consolidate>
+    After populate+verify, losers would consolidate in order:
+    {% for pair in field_merge.consolidate_pairs %}
+      <code>{{ pair.source_id }}</code>→<code>{{ pair.target_id }}</code>{% if not forloop.last %}, {% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+</section>
+{% endif %}

@@ -1,0 +1,45 @@
+{% extends "importer/base.html" %}
+
+{% block title %}Abandon this journey | EasyImports{% endblock %}
+
+{% block content %}
+<section class="panel narrow-panel">
+  <p class="eyebrow">Resolve CRM duplicates</p>
+  <h1>Abandon this journey?</h1>
+
+  <div class="callout callout-warn">
+    <p>{{ confirmation_copy }}</p>
+  </div>
+
+  <dl class="kv">
+    <dt>Provider</dt>
+    <dd>{{ journey.provider_label|default:journey.provider_key }}</dd>
+    <dt>Records</dt>
+    <dd>{% if journey.entity_family == "company" %}Companies{% else %}People{% endif %}</dd>
+    <dt>Current status</dt>
+    <dd>{{ projection.status }}</dd>
+  </dl>
+
+  <form method="post" class="stack-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger">Abandon this journey</button>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_duplicate_journey' %}">Keep this journey</a>
+    </div>
+  </form>
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <dl class="kv">
+      <dt>Journey ID</dt><dd><code>{{ journey.journey_id }}</code></dd>
+      <dt>Run ID</dt><dd><code>{{ projection.run_id }}</code></dd>
+      <dt>Revision</dt><dd>{{ projection.revision }}</dd>
+      <dt>Remote outcome</dt>
+      <dd><code>{{ projection.remote_outcome|default:"unknown" }}</code></dd>
+      <dt>Uncertainty-aware copy</dt>
+      <dd>{% if remote_outcome_uncertain %}yes{% else %}no{% endif %}</dd>
+    </dl>
+  </details>
+</section>
+{% endblock %}

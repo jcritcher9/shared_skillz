@@ -1,0 +1,30 @@
+{% if reclaim_offer %}
+<div class="callout" style="margin-bottom: 1.2rem;" role="status">
+  <p>
+    <strong>This CRM account is already connected under another browser session.</strong>
+    Reclaim it here if you just proved you can authorize that same account.
+  </p>
+  <form
+    method="post"
+    action="{% url 'importer:crm_reclaim' reclaim_offer.existing_connection_id %}"
+    class="inline-form"
+    style="margin-top: 0.5rem;"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="reclaim_handle" value="{{ reclaim_offer.reclaim_handle }}" />
+    <input type="hidden" name="reclaim_offer_id" value="{{ reclaim_offer.reclaim_offer_id }}" />
+    {% if reclaim_offer.unknown_retry %}
+    <input type="hidden" name="explicit_retry" value="1" />
+    {% endif %}
+    <button type="submit" class="btn btn-sm btn-primary">
+      Reclaim this connection on this browser
+    </button>
+  </form>
+  {% if reclaim_offer.display_label or reclaim_offer.expires_at %}
+  <p class="muted small" style="margin-top: 0.4rem;">
+    {% if reclaim_offer.display_label %}{{ reclaim_offer.display_label }}{% endif %}
+    {% if reclaim_offer.expires_at %} · offer expires {{ reclaim_offer.expires_at }}{% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endif %}

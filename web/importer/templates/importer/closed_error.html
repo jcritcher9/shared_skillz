@@ -1,0 +1,15 @@
+{% extends "importer/base.html" %}
+{% block title %}{{ heading }} · EasyImports{% endblock %}
+{% block content %}
+<section class="card" data-closed-operator-error>
+  <p class="eyebrow">EasyImports</p>
+  <h1>{{ heading }}</h1>
+  <p class="lead">{{ lead }}</p>
+  <p>
+    <a class="btn btn-primary" href="/">Return home</a>
+    {% if session %}
+    <a class="btn" href="{% url 'importer:workflow' session.id %}">Return to this import</a>
+    {% endif %}
+  </p>
+</section>
+{% endblock %}

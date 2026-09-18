@@ -1,0 +1,30 @@
+{% if api_technical %}
+<details class="technical-details card" style="margin-top: 0.75rem;">
+  <summary>Technical details</summary>
+  <p class="muted small">
+    Operator-safe diagnostics for API failures. Secrets and tokens are never shown.
+  </p>
+  <dl class="kv">
+    {% if api_technical.route %}
+    <dt>Route</dt>
+    <dd><code>{{ api_technical.route }}</code></dd>
+    {% endif %}
+    {% if api_technical.http_status %}
+    <dt>HTTP status</dt>
+    <dd>{{ api_technical.http_status }}</dd>
+    {% endif %}
+    {% if api_technical.error_id %}
+    <dt>error_id</dt>
+    <dd><code>{{ api_technical.error_id }}</code></dd>
+    {% endif %}
+    {% if api_technical.error_code %}
+    <dt>error_code</dt>
+    <dd><code>{{ api_technical.error_code }}</code></dd>
+    {% endif %}
+    {% if api_technical.message %}
+    <dt>Message</dt>
+    <dd>{{ api_technical.message }}</dd>
+    {% endif %}
+  </dl>
+</details>
+{% endif %}

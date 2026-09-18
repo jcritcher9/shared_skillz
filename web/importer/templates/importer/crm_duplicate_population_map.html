@@ -1,0 +1,81 @@
+{% extends "importer/base.html" %}
+{% block title %}Map Record ID · CRM duplicates · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Map the CRM record ID</h1>
+  <p class="lede">
+    Choose which column in
+    {% if filename %}<strong>{{ filename }}</strong>{% else %}your upload{% endif %}
+    contains the CRM record identifier. EasyImports will reread those IDs from
+    the connected CRM before discovering duplicates.
+  </p>
+
+  {% if row_count is not None %}
+  <p class="muted">{{ row_count }} data row{{ row_count|pluralize }} detected.</p>
+  {% endif %}
+
+  {% if headers %}
+  <div class="table-scroll" style="margin-bottom: 1rem;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% for header in headers %}
+          <th>{{ header }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview_rows %}
+        <tr>
+          {% for cell in row %}
+          <td>{{ cell|default:"" }}</td>
+          {% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ headers|length }}" class="muted">No preview rows.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <form method="post" class="stack-form" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    {% if form.non_field_errors %}
+    <ul class="form-errors">
+      {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if form.form_token.errors %}
+    <ul class="form-errors">
+      {% for error in form.form_token.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    <div class="field">
+      <label for="{{ form.source_column.id_for_label }}">{{ form.source_column.label }}</label>
+      {{ form.source_column }}
+      {% if form.source_column.help_text %}
+      <p class="field-help">{{ form.source_column.help_text }}</p>
+      {% endif %}
+      {% if form.source_column.errors %}<div class="field-errors">{{ form.source_column.errors }}</div>{% endif %}
+      {% if suggested_source_column %}
+      <p class="field-help">Suggested column: <code>{{ suggested_source_column }}</code> (confirm to continue).</p>
+      {% endif %}
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="button btn btn-primary">Analyze these records</button>
+      <a class="button btn" href="{% url 'importer:crm_duplicate_journey' %}">Start over</a>
+    </div>
+  </form>
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <p class="muted">
+      Mapping confirms a neutral <code>record_id</code> role only. Existence,
+      tenant, and object-type checks happen during the subsequent CRM read.
+      Population upload: <code>{{ session.options.population_upload_id }}</code>
+    </p>
+  </details>
+</section>
+{% endblock %}

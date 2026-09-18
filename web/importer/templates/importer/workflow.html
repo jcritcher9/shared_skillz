@@ -1,0 +1,973 @@
+{% extends "importer/base.html" %}
+{% block title %}Workflow · EasyImports{% endblock %}
+{% block content %}
+<div class="results-head page-head">
+  <div>
+    <p class="eyebrow">EasyImports</p>
+    <h1>{{ status_presentation.heading }}</h1>
+    <p class="lead">{{ status_presentation.description }}</p>
+    <p class="muted">Run by {{ session.operator_label }}</p>
+  </div>
+  <form method="post" action="{% url 'importer:delete_session' session.id %}">
+    {% csrf_token %}
+    <button class="link-danger" type="submit">Archive this import</button>
+  </form>
+</div>
+
+{% if not status_known %}
+  <div class="message warning">This import requires a newer version of the web app. It remains read-only.</div>
+{% endif %}
+{% if projection.decision and not decision_known %}
+  <div class="message warning">This review step requires a newer version of the web app. It remains read-only.</div>
+{% endif %}
+{% if awaiting_projection_refresh %}
+  <div class="message warning">Your last action was saved, but the updated import status is temporarily unavailable. Actions remain disabled.</div>
+{% endif %}
+{% if projection.review_progress.finished_for_now %}
+  <div class="message success">
+    Review finished for now. {{ projection.review_progress.deferred_group_count }}
+    remaining group{{ projection.review_progress.deferred_group_count|pluralize }}
+    will not be merged in this run.
+    {% if projection.review_progress.remaining_groups_exported %}
+      Your remaining-groups CSV is available under Output files below.
+    {% endif %}
+  </div>
+{% endif %}
+
+{% for mutation in pending_mutations %}
+<section
+  class="card{% if mutation.operation_in_progress %} mutation-progress{% endif %}"
+  data-mutation-kind="{{ mutation.mutation_kind }}"
+  data-mutation-pending
+  {% if mutation.operation_in_progress %}
+  data-mutation-status-url="{% url 'importer:mutation_status' session.id mutation.id %}"
+  {% endif %}
+>
+  <h2>{{ mutation.pending_copy.headline }}</h2>
+  <p{% if mutation.operation_in_progress %} role="status" aria-live="polite" data-progress-message{% endif %}>{{ mutation.pending_copy.body }}</p>
+  <form method="post" action="{% url 'importer:retry_mutation' session.id mutation.id %}">
+    {% csrf_token %}
+    {% for key, value in retry_tokens.items %}
+      {% if key == mutation.id|stringformat:'s' %}<input type="hidden" name="form_token" value="{{ value }}">{% endif %}
+    {% endfor %}
+    {% if mutation.retry_available %}
+      <button class="btn" type="submit">Retry saved action</button>
+    {% else %}
+      <span>No operator action is needed.</span>
+    {% endif %}
+  </form>
+  {% if mutation.operation_in_progress %}
+    <noscript><p>JavaScript is disabled. Reload this page to check the saved action.</p></noscript>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% for mutation in rejected_mutations %}
+<section class="card">
+  <h2>Action could not be completed</h2>
+  <div class="message error">{{ mutation.error_message }}</div>
+  {% if mutation.is_idempotency_conflict %}
+    <p>This action conflicts with a previously saved request. Contact support before trying a replacement.</p>
+  {% else %}
+    <form method="post" action="{% url 'importer:acknowledge_rejection' session.id mutation.id %}">
+      {% csrf_token %}
+      {% for key, value in rejection_tokens.items %}
+        {% if key == mutation.id|stringformat:'s' %}<input type="hidden" name="form_token" value="{{ value }}">{% endif %}
+      {% endfor %}
+      <button class="btn" type="submit">Acknowledge and try again</button>
+    </form>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if not actions_blocked %}
+  {% if projection.decision %}
+  <section class="card">
+    <p class="eyebrow">Review required</p>
+    <h2>{{ projection.decision.body.title|default:"Decision required" }}</h2>
+    <p>{{ projection.decision.body.message }}</p>
+
+    {% if projection.decision.body.duplicate_group_id %}
+    <dl>
+      <dt>Confidence</dt><dd>{{ projection.decision.body.confidence_score }} · {{ projection.decision.body.confidence_band }}</dd>
+      <dt>Recommendation</dt><dd>The recommended survivor is highlighted in the comparison below.</dd>
+    </dl>
+    {% endif %}
+
+    {% if decision_known %}
+    <form method="post" action="{% url 'importer:submit_decision' session.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.decision }}">
+      {% with dtype=projection.decision.decision_type body=projection.decision.body %}
+        {% if dtype == "validation_failed" %}
+          <div class="table-scroll decision-review-scroll">
+            <table class="data-table">
+              <thead><tr>{% for column in decision_columns %}<th>{{ column }}</th>{% endfor %}<th>Email edit</th></tr></thead>
+              <tbody>{% for row in decision_rows %}<tr>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}<td><input name="email__{{ row.option_id }}" value="{{ row.email }}"></td></tr>{% endfor %}</tbody>
+            </table>
+          </div>
+          <label>Resolution
+            <select name="action">{% for action in body.actions %}<option value="{{ action }}">{{ action }}</option>{% endfor %}</select>
+          </label>
+        {% elif dtype == "list_duplicates" or dtype == "multiple_crm_matches" or dtype == "multiple_crm_account_matches" %}
+          <p class="muted">Compare the strongest identity and matching signals below. Internal record identifiers remain available in the closed technical details.</p>
+          <div class="decision-groups">
+            {% for group in decision_groups %}
+              <fieldset class="decision-group">
+                <legend>{{ group.title }}</legend>
+                {% if group.context_items %}
+                  <dl class="comparison-context">
+                    {% for item in group.context_items %}
+                      <div><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
+                    {% endfor %}
+                  </dl>
+                {% endif %}
+                <div class="table-scroll decision-review-scroll">
+                  <table class="data-table decision-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Choose</th>
+                        {% for column in decision_group_columns %}<th scope="col">{{ column.label }}</th>{% endfor %}
+                        <th scope="col">Why it ranks here</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in group.rows %}
+                        <tr class="{% if row.selected %}decision-row-selected {% endif %}{% if row.synthetic %}decision-row-synthetic{% endif %}">
+                          <td class="decision-choice">
+                            <label>
+                              <input type="radio" name="{{ group.input_name }}" value="{{ row.option_id }}"{% if row.selected %} checked{% endif %}{% if row.read_only %} disabled{% endif %}>
+                              <span>{% if row.option_label %}{{ row.option_label }}{% else %}Select{% endif %}</span>
+                            </label>
+                            {% if row.recommended %}<span class="recommendation-badge">Recommended</span>{% endif %}
+                            {% if row.read_only %}<span>Unavailable in this web version</span>{% endif %}
+                          </td>
+                          {% for cell in row.group_cells %}<td>{{ cell|default_if_none:"—" }}</td>{% endfor %}
+                          <td>
+                            {% if row.highlights %}
+                              <ul class="evidence-highlights">
+                                {% for item in row.highlights %}<li>{{ item }}</li>{% endfor %}
+                              </ul>
+                            {% elif row.synthetic %}
+                              <span class="muted">Alternative outcome</span>
+                            {% else %}
+                              <span class="muted">No ranking detail available</span>
+                            {% endif %}
+                          </td>
+                        </tr>
+                      {% empty %}
+                        <tr><td colspan="99">No choices are available for this group.</td></tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% for option in group.whole_group_options %}
+                  <div class="decision-group-action{% if option.selected %} decision-row-selected{% endif %}">
+                    <label>
+                      <input type="radio" name="{{ group.input_name }}" value="{{ option.option_id }}"{% if option.selected %} checked{% endif %}{% if option.read_only %} disabled{% endif %}>
+                      <span>{{ option.option_label }}</span>
+                    </label>
+                    {% if option.recommended %}<span class="recommendation-badge">Recommended</span>{% endif %}
+                    {% if option.read_only %}<span>Unavailable in this web version</span>{% endif %}
+                  </div>
+                {% endfor %}
+              </fieldset>
+            {% empty %}
+              <p>No choices are available for review.</p>
+            {% endfor %}
+          </div>
+          <input type="hidden" name="action" value="submit_selections">
+        {% elif dtype == "account_duplicate_group_review" or dtype == "person_duplicate_group_review" %}
+          {% if duplicate_review_progress %}
+          <div class="callout duplicate-review-progress" role="status">
+            <p class="eyebrow">{{ duplicate_review_progress.headline }}</p>
+            <p>
+              Confirm a winner for <strong>every</strong> found group before merges
+              can be authorized.
+              {% if duplicate_review_progress.total_group_count %}
+                {{ duplicate_review_progress.decided_group_count }} confirmed ·
+                {{ duplicate_review_progress.remaining_group_count }} remaining
+                (including this group).
+              {% endif %}
+            </p>
+            {% if duplicate_review_progress.group_id %}
+            <p class="muted">Group id: <code>{{ duplicate_review_progress.group_id }}</code></p>
+            {% endif %}
+          </div>
+          {% endif %}
+          <div class="callout callout-ok">
+            <p>
+              <strong>Default winner is pre-selected</strong>
+              {% if duplicate_review_progress.selected_survivor_id %}
+                (<code>{{ duplicate_review_progress.selected_survivor_id }}</code>)
+              {% endif %}.
+              Keep it, pick a different survivor, or skip the group.
+              Recommendation is never automatic approval — you must submit.
+            </p>
+          </div>
+          <div class="decision-groups">
+            <fieldset class="decision-group">
+              <legend>Choose the winner for this group</legend>
+              <p class="muted">Compare identity and ranking evidence below. Internal identifiers stay in technical details.</p>
+              <div class="table-scroll">
+                <table class="data-table decision-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Choose</th>
+                      {% for column in duplicate_choice_columns %}<th scope="col">{{ column.label }}</th>{% endfor %}
+                      <th scope="col">Why it ranks here</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in duplicate_choice_rows %}
+                      {% if not row.synthetic %}
+                      <tr class="duplicate-choice-row{% if row.selected %} decision-row-selected{% endif %}" data-duplicate-choice-row>
+                        <td class="decision-choice">
+                          <label>
+                            <input
+                              type="radio"
+                              name="duplicate_choice"
+                              value="{{ row.choice_value }}"
+                              data-duplicate-choice
+                              data-recommended="{% if row.recommended %}1{% else %}0{% endif %}"
+                              data-synthetic="0"
+                              {% if row.selected %} checked{% endif %}
+                            >
+                            <span data-choice-label>{% if row.recommended and row.selected %}Confirm recommended winner{% elif row.recommended %}Keep as survivor{% else %}{{ row.label }}{% endif %}</span>
+                          </label>
+                          {% if row.recommended %}<span class="recommendation-badge">Recommended default</span>{% endif %}
+                          <span class="selection-badge" data-selection-badge{% if not row.selected %} hidden{% endif %}>Selected</span>
+                        </td>
+                        {% for cell in row.cells %}<td>{{ cell|default_if_none:"—" }}</td>{% endfor %}
+                        <td>
+                          {% if row.highlights %}
+                            <ul class="evidence-highlights">
+                              {% for item in row.highlights %}<li>{{ item }}</li>{% endfor %}
+                            </ul>
+                          {% else %}
+                            <span class="muted">No ranking detail available</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      {% endif %}
+                    {% empty %}
+                      <tr><td colspan="99">No members are available for this group.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% for row in duplicate_choice_rows %}
+                {% if row.synthetic %}
+                <div class="decision-group-action{% if row.selected %} decision-row-selected{% endif %}" data-duplicate-choice-row>
+                  <label>
+                    <input
+                      type="radio"
+                      name="duplicate_choice"
+                      value="{{ row.choice_value }}"
+                      data-duplicate-choice
+                      data-recommended="{% if row.recommended %}1{% else %}0{% endif %}"
+                      data-synthetic="1"
+                      {% if row.selected %} checked{% endif %}
+                    >
+                    <span data-choice-label>{{ row.label }}</span>
+                  </label>
+                </div>
+                {% endif %}
+              {% endfor %}
+            </fieldset>
+          </div>
+          {% if body.field_merge_plan %}
+          {% with field_merge=field_merge_display %}
+          {% include "importer/_field_merge_plan.html" %}
+          {% endwith %}
+          {% endif %}
+          <p class="muted">Your decision will be recorded under the operator name shown above.</p>
+        {% else %}
+          <p class="error">This decision type is not supported by this web version.</p>
+        {% endif %}
+      {% endwith %}
+      <button class="btn btn-primary" type="submit">{% if duplicate_review %}Confirm winner and continue{% else %}Submit decision{% endif %}</button>
+    </form>
+    {% if projection.review_progress.finish_for_now_available %}
+    <div class="callout">
+      <h3>Finish for now</h3>
+      <p>
+        You have saved {{ projection.review_progress.decided_group_count }}
+        group{{ projection.review_progress.decided_group_count|pluralize }}.
+        Finish this review and leave
+        {{ projection.review_progress.remaining_group_count }} remaining
+        group{{ projection.review_progress.remaining_group_count|pluralize }}
+        unmerged.
+      </p>
+      <form method="post" action="{% url 'importer:submit_decision' session.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ tokens.decision }}">
+        <input type="hidden" name="action" value="finish_for_now">
+        <fieldset class="field">
+          <legend>What should happen to the remaining groups?</legend>
+          <label>
+            <input type="radio" name="remaining_group_disposition" value="abandon" checked>
+            Abandon them for this run
+          </label>
+          <label>
+            <input type="radio" name="remaining_group_disposition" value="export">
+            Export a CSV so I can resume them later without rediscovery
+          </label>
+        </fieldset>
+        <p class="muted">
+          Only groups you already approved can proceed to the existing dry-run or
+          execute authorization step. This does not authorize CRM changes.
+        </p>
+        <button class="btn btn-secondary" type="submit">Finish for now</button>
+      </form>
+    </div>
+    {% endif %}
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if projection.effect_intent %}
+  <section class="card">
+    <p class="eyebrow">Next step</p>
+    <h2>{{ effect_presentation.heading }}</h2>
+    <p class="lead">{{ effect_presentation.description }}</p>
+    {% if effect_presentation.summary_items %}
+      <div class="cards-grid">
+        {% for item in effect_presentation.summary_items %}
+          <div class="stat-card">
+            <div class="stat-value">{{ item.value }}</div>
+            <div class="stat-label">{{ item.label }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if effect_review and effect_review.kind == "account_provisioning_candidates" %}
+    <div class="account-provision-review">
+      <h3>Companies that would receive new Accounts</h3>
+      <p class="muted">
+        Review this deduplicated company set before authorizing. Skipping Account
+        creation routes these people as Leads. This set is bound to the
+        authorization work digest for this step.
+      </p>
+      {% if effect_review.candidates %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Domain</th>
+            <th>People affected</th>
+            <th>How it entered</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in effect_review.candidates %}
+          <tr>
+            <td>{{ row.company_identity }}</td>
+            <td>{% if row.identity_domain %}{{ row.identity_domain }}{% else %}—{% endif %}</td>
+            <td>{{ row.affected_person_count }}</td>
+            <td>
+              {% if row.origin == "none_of_these" %}
+                None of these Accounts
+              {% elif row.origin == "no_match" %}
+                No CRM Account match
+              {% else %}
+                {{ row.origin }}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No net-new Account candidates for this run.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+    <form method="post" action="{% url 'importer:authorize_effect' session.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.effect }}">
+      <div class="field">
+      <label>Choose an option
+        <select name="selected_mode">
+          {% for mode in effect_presentation.mode_options %}<option value="{{ mode.value }}">{{ mode.label }}</option>{% endfor %}
+        </select>
+      </label>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ effect_presentation.submit_label|default:"Continue" }}</button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if review_handoff_refreshing %}
+  <span hidden data-review-handoff-refreshing></span>
+  {% endif %}
+
+  {% if review_preparing %}
+  <section class="card" role="status" aria-live="polite" data-review-preparing>
+    <p class="eyebrow">Review</p>
+    <h2>Preparing your review</h2>
+    <p class="lead">{{ review_preparation_copy }}</p>
+  </section>
+  {% endif %}
+
+  {% if projection.review_handoff and not review_preparing %}
+  <section class="card">
+    <p class="eyebrow">Review required</p>
+    <h2>Review every duplicate group</h2>
+    <p class="lead">
+      EasyImports found
+      <strong>{{ projection.review_handoff.group_count }}</strong>
+      duplicate group{{ projection.review_handoff.group_count|pluralize }}.
+      You will confirm the default winner (or change/skip) for
+      <strong>each</strong> group. Recommendation is never approval, and
+      review never authorizes merges.
+    </p>
+    <dl>
+      <dt>Entity</dt><dd>{{ projection.review_handoff.entity }}</dd>
+      <dt>Groups to review</dt><dd>{{ projection.review_handoff.group_count }}</dd>
+    </dl>
+    <ol class="how-list">
+      <li>Confirm a winner for every group (or skip groups you will not merge).</li>
+      <li>Package the decisions.</li>
+      <li>Authorize a merge dry-run or apply step explicitly.</li>
+    </ol>
+    <form method="post" action="{% url 'importer:start_review' session.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.review }}">
+      <button class="btn btn-primary" type="submit">
+        Start reviewing {{ projection.review_handoff.group_count }} group{{ projection.review_handoff.group_count|pluralize }}
+      </button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if workflow.status == "paused_unknown" or workflow.status == "paused_verification" %}
+  <section class="card">
+    <h2>Effect checkpoint paused</h2>
+    <p>EasyImports will verify the previous operation before doing any additional work.</p>
+    {% if projection.paused_effect_diagnostic %}
+    <p>{{ projection.paused_effect_diagnostic.message }}</p>
+    {% endif %}
+    <form method="post" action="{% url 'importer:resume_effect' session.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.resume }}">
+      <button class="btn" type="submit">Verify and continue</button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if workflow.role == "review" and workflow.status == "succeeded" %}
+  <section class="card">
+    {% if is_duplicate_resolution %}
+    <p class="eyebrow">Next step</p>
+    <h2>Review complete — continue to merge authorization</h2>
+    <p class="lead">
+      Your confirmed winners are ready. Package them, return them to the
+      source run, then authorize a merge dry-run or apply step. No CRM
+      merges run until you authorize that effect.
+    </p>
+    {% else %}
+    <h2>Return review decisions</h2>
+    <p>Your duplicate decisions are ready to return to the source import.</p>
+    {% endif %}
+    {% if decision_set_handoff %}
+      <dl>
+        <dt>Decision count</dt><dd>{{ decision_set_handoff.decision_count }}</dd>
+      </dl>
+      <form method="post" action="{% url 'importer:continue_source' session.id %}">
+        {% csrf_token %}<input type="hidden" name="form_token" value="{{ tokens.continue }}">
+        <button class="btn btn-primary" type="submit">
+          {% if is_duplicate_resolution %}Continue to merge authorization{% else %}Continue source import{% endif %}
+        </button>
+      </form>
+    {% else %}
+      <form method="post" action="{% url 'importer:create_decision_set' session.id %}">
+        {% csrf_token %}<input type="hidden" name="form_token" value="{{ tokens.decision_set }}">
+        <button class="btn btn-primary" type="submit">
+          {% if is_duplicate_resolution %}Package confirmed winners{% else %}Prepare decisions{% endif %}
+        </button>
+      </form>
+    {% endif %}
+  </section>
+  {% endif %}
+{% endif %}
+
+{% if merge_execution_presentation %}
+<section class="card" data-merge-execution-outcome>
+  <p class="eyebrow">Merge results</p>
+  <h2>{{ merge_execution_presentation.headline }}</h2>
+  {% if merge_execution_presentation.mode %}
+  <p class="muted" data-merge-execution-mode="{{ merge_execution_presentation.mode }}">
+    {{ merge_execution_presentation.mode_label }}
+  </p>
+  {% endif %}
+  {% if merge_execution_presentation.progress_copy %}
+  <p data-merge-execution-progress>{{ merge_execution_presentation.progress_copy }}</p>
+  {% endif %}
+  {% if merge_execution_presentation.dry_run_copy %}
+  <div class="message info" data-merge-execution-dry-run>{{ merge_execution_presentation.dry_run_copy }}</div>
+  {% endif %}
+  {% if merge_execution_presentation.run_failure_copy %}
+  <div class="message warning" data-merge-execution-run-failure>{{ merge_execution_presentation.run_failure_copy }}</div>
+  {% endif %}
+  <div class="cards-grid">
+    <div class="stat-card">
+      <div class="stat-value">{{ merge_execution_presentation.merged_count }}</div>
+      <div class="stat-label">Merged</div>
+    </div>
+    <div class="stat-card{% if merge_execution_presentation.failed_count %} tone-warn{% endif %}">
+      <div class="stat-value">{{ merge_execution_presentation.failed_count }}</div>
+      <div class="stat-label">Failed</div>
+    </div>
+  </div>
+  {% if merge_execution_presentation.failures %}
+  <h3>Failed merges</h3>
+  <ul data-merge-execution-failures>
+    {% for row in merge_execution_presentation.failures %}
+    <li>
+      Group {{ row.group_id }}{% if row.survivor_id %} (survivor {{ row.survivor_id }}){% endif %}:
+      record {{ row.loser_id }} — {{ row.reason }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if merge_execution_presentation.exceptions %}
+  <h3>Groups that need attention</h3>
+  <ul data-merge-execution-exceptions>
+    {% for row in merge_execution_presentation.exceptions %}
+    <li>
+      Group {{ row.group_id }}{% if row.reason_code %} ({{ row.reason_code }}){% endif %}
+      — {{ row.sanitized_display }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if merge_execution_presentation.more_url %}
+  <p><a class="btn" href="{{ merge_execution_presentation.more_url }}">More</a></p>
+  {% endif %}
+  {% endif %}
+  {% if merge_execution_presentation.continuation_available %}
+  <p data-duplicate-execution-continuation>
+    <form method="post" action="{% url 'importer:continue_duplicate_execution' session.id %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.continue_duplicate_execution }}">
+      <button class="btn btn-primary" type="submit">Continue remaining merges</button>
+    </form>
+    <form method="post" action="{% url 'importer:finish_duplicate_execution' session.id %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.finish_duplicate_execution }}">
+      <button class="btn" type="submit">Finish with remaining exceptions</button>
+    </form>
+  </p>
+  {% elif merge_execution_presentation.retryable %}
+  <p>
+    <a class="btn" href="{{ merge_execution_presentation.retry_url }}">Retry failed merges</a>
+  </p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if terminal %}
+<section class="card">
+  <p class="eyebrow">Results</p>
+  <h2>Run summary</h2>
+  {% if terminal_presentation.no_crm_changes %}
+    <div class="message info">No live CRM changes were authorized for this run.</div>
+  {% endif %}
+  {% if terminal_presentation.cards %}
+    <div class="cards-grid">
+      {% for card in terminal_presentation.cards %}
+        <div class="stat-card{% if card.label == 'Rows failed' and card.value %} tone-warn{% endif %}">
+          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-label">{{ card.label }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if terminal_presentation.reconciles == False %}
+    <div class="message warning">Some uploaded rows could not be fully accounted for. Review the technical details or contact support.</div>
+  {% endif %}
+  {% if terminal_presentation.receipts %}
+    <h3>What happened</h3>
+    <div class="result-list">
+      {% for receipt in terminal_presentation.receipts %}
+        <div class="result-item">
+          <div>
+            <strong>{{ receipt.track }}</strong>
+            {% if receipt.description %}<p class="muted">{{ receipt.description }}</p>{% endif %}
+          </div>
+          <span class="status status-completed">{{ receipt.outcome }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if run_output_package_eligible %}
+<section class="card" data-run-output-package>
+  <p class="eyebrow">Results package</p>
+  <h2>Download results package</h2>
+  <p class="muted">
+    {% if is_duplicate_resolution %}
+    A single downloadable package of duplicate groups, chosen survivors,
+    and merge outcomes for this run.
+    {% else %}
+    A single downloadable package with prepared import files, metadata, and
+    diagnostics for this run.
+    {% endif %}
+  </p>
+  {% if run_output_package %}
+    <p>
+      <a
+        class="btn btn-primary"
+        href="{% url 'importer:run_output_package_content' session.id run_output_package.package_id %}"
+      >Download results package</a>
+    </p>
+    <p class="muted">
+      Package ready
+      {% if run_output_package.byte_count %}· {{ run_output_package.byte_count }} bytes{% endif %}
+    </p>
+  {% else %}
+    <form method="post" action="{% url 'importer:create_run_output_package' session.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ tokens.run_output_package }}">
+      <button class="btn btn-primary" type="submit">Download results package</button>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if customer_artifacts %}
+<section class="card">
+  <h2>Individual result files</h2>
+  <p class="muted">Optional per-file downloads. Prefer the results package above when available.</p>
+  <div class="download-list">
+    {% for artifact in customer_artifacts %}
+      {% if artifact.downloadable %}
+        <a class="download-item" href="{% url 'importer:artifact' session.id workflow.run_id artifact.item.artifact_id %}">
+      {% else %}
+        <div class="download-item subtle">
+      {% endif %}
+        <span class="download-order">{{ forloop.counter }}</span>
+        <span class="download-body">
+          <span class="download-label">{{ artifact.display_name }}</span>
+          <span class="download-desc muted">{{ artifact.description }}</span>
+        </span>
+        <span class="download-meta">
+          <span class="download-rows">{{ artifact.row_label }}</span>
+          {% if artifact.downloadable %}<span class="download-cue">Download</span>{% endif %}
+        </span>
+      {% if artifact.downloadable %}</a>{% else %}</div>{% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<details class="card run-details technical-details">
+  <summary><h2>Technical details</h2></summary>
+  <p class="muted">Execution identifiers and recovery evidence for support and troubleshooting.</p>
+  <div class="details-grid">
+    <section class="details-block">
+      <h4>Workflow</h4>
+      <div class="table-scroll">
+        <table class="data-table kv compact">
+          <tbody>
+            <tr><th>Run ID</th><td>{{ workflow.run_id }}</td></tr>
+            <tr><th>Status</th><td>{{ workflow.status }}</td></tr>
+            <tr><th>Stage</th><td>{{ workflow.stage }}</td></tr>
+            <tr><th>Revision</th><td>{{ workflow.revision }}</td></tr>
+            <tr><th>Product</th><td>{{ projection.workflow_key }} · version {{ projection.workflow_version }}</td></tr>
+            <tr><th>Target</th><td>{{ projection.target_provider_id }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if projection.paused_effect_diagnostic %}
+    <section class="details-block">
+      <h4>Paused effect</h4>
+      <dl>
+        <dt>Code</dt><dd>{{ projection.paused_effect_diagnostic.code }}</dd>
+        <dt>Error type</dt><dd>{{ projection.paused_effect_diagnostic.error_type }}</dd>
+        <dt>Message</dt><dd>{{ projection.paused_effect_diagnostic.message }}</dd>
+        {% if projection.paused_effect_diagnostic.win32_code_hex %}
+        <dt>Win32</dt>
+        <dd>
+          {{ projection.paused_effect_diagnostic.win32_code }}
+          ({{ projection.paused_effect_diagnostic.win32_code_hex }})
+        </dd>
+        {% endif %}
+      </dl>
+    </section>
+    {% endif %}
+
+    {% if projection.effect_intent %}
+    <section class="details-block">
+      <h4>Current effect intent</h4>
+      <dl>
+        <dt>Intent ID</dt><dd><code>{{ projection.effect_intent.intent_id }}</code></dd>
+        <dt>Track</dt><dd>{{ projection.effect_intent.track }}</dd>
+        <dt>Gate phase ID</dt><dd><code>{{ projection.effect_intent.gate_phase_id }}</code></dd>
+        <dt>Effect phase ID</dt><dd><code>{{ projection.effect_intent.effect_phase_id }}</code></dd>
+        <dt>Target provider</dt><dd>{{ projection.effect_intent.target_provider_id }}</dd>
+        <dt>Target fingerprint</dt><dd><code>{{ projection.effect_intent.target_fingerprint }}</code></dd>
+        <dt>Work digest</dt><dd><code>{{ projection.effect_intent.work_digest }}</code></dd>
+        <dt>Maximum mode</dt><dd>{{ projection.effect_intent.maximum_mode }}</dd>
+        <dt>Confirmation</dt><dd>{{ projection.effect_intent.confirmation }}</dd>
+      </dl>
+    </section>
+    {% endif %}
+
+    {% if projection.review_handoff %}
+    <section class="details-block">
+      <h4>Review handoff</h4>
+      <dl>
+        <dt>Handoff</dt><dd>{{ projection.review_handoff.handoff_id }}</dd>
+        <dt>Binding digest</dt><dd><code>{{ projection.review_handoff.binding_digest }}</code></dd>
+      </dl>
+    </section>
+    {% endif %}
+
+    {% if decision_set_handoff %}
+    <section class="details-block">
+      <h4>Decision-set handoff</h4>
+      <dl>
+        <dt>Handoff</dt><dd>{{ decision_set_handoff.handoff_id }}</dd>
+        <dt>Binding digest</dt><dd><code>{{ decision_set_handoff.binding_digest }}</code></dd>
+      </dl>
+    </section>
+    {% endif %}
+
+    {% if decision_source_columns %}
+    <section class="details-block">
+      <h4>Decision frame columns</h4>
+      <p class="muted">{{ decision_source_columns|join:", " }}</p>
+    </section>
+    {% endif %}
+  </div>
+
+  {% if decision_tables %}
+    <h3>Decision frames</h3>
+    {% for table in decision_tables %}
+      <details>
+        <summary>{{ table.name }} ({{ table.rows|length }} rows)</summary>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr>{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for row in table.rows %}<tr>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="99">No rows.</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {% endfor %}
+  {% endif %}
+
+  {% if projection.effect_grants %}
+    <h3>Effect authorization grants</h3>
+    <div class="table-scroll"><table class="data-table compact">
+      <thead><tr><th>Track</th><th>Mode</th><th>Target</th><th>Fingerprint</th><th>Work digest</th><th>Confirmation</th></tr></thead>
+      <tbody>{% for grant in projection.effect_grants %}<tr><td>{{ grant.track }}</td><td>{{ grant.selected_mode }}</td><td>{{ grant.target_provider_id }}</td><td><code>{{ grant.target_fingerprint }}</code></td><td><code>{{ grant.work_digest }}</code></td><td>{{ grant.confirmation }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  {% endif %}
+
+  {% if cm_policy_details %}
+    <h3>Campaign membership policy</h3>
+    <p class="muted">Frozen at configure/create (Ids only; no CRM secrets).</p>
+    <dl>
+      <dt>Selected mode</dt><dd><code>{{ cm_policy_details.mode }}</code></dd>
+      {% if cm_policy_details.policy_version %}
+        <dt>Policy version</dt><dd><code>{{ cm_policy_details.policy_version }}</code></dd>
+      {% endif %}
+      {% if cm_policy_details.default_campaign_binding %}
+        <dt>Default Campaign Id</dt><dd><code>{{ cm_policy_details.default_campaign_binding }}</code></dd>
+      {% endif %}
+      {% if cm_policy_details.default_desired_status %}
+        <dt>Default status</dt><dd><code>{{ cm_policy_details.default_desired_status }}</code></dd>
+      {% endif %}
+      {% if cm_policy_details.campaign_id_column %}
+        <dt>Campaign Id column</dt><dd><code>{{ cm_policy_details.campaign_id_column }}</code></dd>
+      {% endif %}
+      {% if cm_policy_details.campaign_match_column %}
+        <dt>Campaign name column</dt><dd><code>{{ cm_policy_details.campaign_match_column }}</code></dd>
+      {% endif %}
+      {% if cm_policy_details.member_status_column %}
+        <dt>Member status column</dt><dd><code>{{ cm_policy_details.member_status_column }}</code></dd>
+      {% endif %}
+    </dl>
+    {% if cm_policy_details.resolutions %}
+      <div class="table-scroll"><table class="data-table compact">
+        <thead><tr><th>Match key</th><th>Campaign Id</th><th>Source</th><th>Observed name</th><th>Resolved at</th></tr></thead>
+        <tbody>
+          {% for row in cm_policy_details.resolutions %}
+            <tr>
+              <td><code>{{ row.match_key }}</code></td>
+              <td><code>{{ row.campaign_id }}</code></td>
+              <td>{{ row.selection_source }}</td>
+              <td>{{ row.observed_name|default:"—" }}</td>
+              <td><code>{{ row.resolved_at }}</code></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+    {% endif %}
+  {% endif %}
+
+  {% if terminal %}
+    <h3>Receipts and accountability</h3>
+    <p>{{ terminal.workflow_key }} · version {{ terminal.workflow_version }}{% if terminal.entity %} · {{ terminal.entity }}{% endif %}</p>
+    <div class="table-scroll"><table class="data-table compact">
+      <thead><tr><th>Track</th><th>Outcome</th><th>Authorization</th><th>Capability</th><th>Reason</th><th>Evidence</th></tr></thead>
+      <tbody>{% for receipt in sanitized_terminal.receipts %}<tr><td>{{ receipt.track }}</td><td>{{ receipt.outcome }}</td><td>{{ receipt.authorization }}</td><td>{{ receipt.capability }}</td><td>{{ receipt.reason }}</td><td>{{ receipt.evidence }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+    {% if projection.oversized_quarantine_components %}
+    <h3>Oversized components (not duplicate groups)</h3>
+    <p>These records were too large to auto-resolve and were quarantined. They are not final duplicate groups.</p>
+    <div class="table-scroll"><table class="data-table compact">
+      <thead><tr><th>Component</th><th>Records</th><th>Reason</th><th>Members</th></tr></thead>
+      <tbody>
+        {% for item in projection.oversized_quarantine_components %}
+        <tr>
+          <td><code>{{ item.component_id }}</code></td>
+          <td>{{ item.record_count }}</td>
+          <td>{{ item.reason }}</td>
+          <td>{% for mid in item.member_ids %}<code>{{ mid }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% endif %}
+
+    <h3>Accountability</h3>
+    {% if terminal.accountability.dispositions %}
+      <div class="table-scroll"><table class="data-table compact">
+        <thead><tr><th>Group</th><th>Status</th><th>Members</th><th>Survivor</th><th>Actions</th><th>Verified actions</th><th>Error</th></tr></thead>
+        <tbody>{% for item in terminal.accountability.dispositions %}<tr><td>{{ item.duplicate_group_id }}</td><td>{{ item.status }}</td><td>{{ item.member_ids|join:", " }}</td><td>{{ item.selected_survivor_id }}</td><td>{{ item.action_ids|join:", " }}</td><td>{{ item.verified_action_ids|join:", " }}</td><td>{{ item.error_code }} {{ item.error_message }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+    {% else %}
+      <dl>{% for key, value in terminal.accountability.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+    {% endif %}
+
+    <h3>Delivery manifest</h3>
+    {% if terminal.delivery_manifest %}
+      <dl>{% for key, value in terminal.delivery_manifest.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+    {% else %}
+      <p>No delivery manifest was produced for this workflow.</p>
+    {% endif %}
+  {% endif %}
+
+  {% if artifacts %}
+    <h3>Artifact integrity</h3>
+    <div class="table-scroll"><table class="data-table compact">
+      <thead><tr><th>Filename</th><th>Availability</th><th>Rows</th><th>Content digest</th></tr></thead>
+      <tbody>{% for artifact in artifacts %}<tr><td>{{ artifact.metadata.filename }}</td><td>{{ artifact.metadata.availability }}</td><td>{{ artifact.metadata.row_count }}</td><td><code>{{ artifact.metadata.content_digest }}</code></td></tr>{% endfor %}</tbody>
+    </table></div>
+  {% endif %}
+
+  {% if command_receipts %}
+    <h3>Command receipt journal</h3>
+    {% for mutation in command_receipts %}
+      <details>
+        <summary>{{ mutation.mutation_kind }} · {{ mutation.state }} · {{ mutation.created_at }}</summary>
+        <dl>
+          <dt>Idempotency key</dt><dd><code>{{ mutation.idempotency_key }}</code></dd>
+          <dt>Outcome</dt><dd>{{ mutation.outcome }}</dd>
+          <dt>Error code</dt><dd>{{ mutation.error_code }}</dd>
+          <dt>Message</dt><dd>{{ mutation.message }}</dd>
+          <dt>Resource</dt><dd>{{ mutation.resource }}</dd>
+          <dt>Result</dt><dd>{{ mutation.result }}</dd>
+        </dl>
+      </details>
+    {% endfor %}
+  {% endif %}
+
+  <details>
+    <summary>Stored workflow projection</summary>
+    <pre>{{ sanitized_projection }}</pre>
+  </details>
+</details>
+<script>
+(() => {
+  // Keep winner highlight / Selected badge in sync with the chosen radio.
+  const choiceRows = document.querySelectorAll("[data-duplicate-choice-row]");
+  if (choiceRows.length) {
+    const syncDuplicateChoiceHighlight = () => {
+      for (const row of choiceRows) {
+        const input = row.querySelector("[data-duplicate-choice]");
+        const badge = row.querySelector("[data-selection-badge]");
+        const label = row.querySelector("[data-choice-label]");
+        if (!input) continue;
+        const checked = input.checked;
+        row.classList.toggle("decision-row-selected", checked);
+        if (badge) {
+          const synthetic = input.getAttribute("data-synthetic") === "1";
+          if (checked && !synthetic) {
+            badge.removeAttribute("hidden");
+          } else {
+            badge.setAttribute("hidden", "hidden");
+          }
+        }
+        if (label) {
+          const recommended = input.getAttribute("data-recommended") === "1";
+          if (recommended && checked) {
+            label.textContent = "Confirm recommended winner";
+          } else if (recommended) {
+            label.textContent = "Keep as survivor";
+          }
+          // Non-recommended labels stay as server-rendered text.
+        }
+      }
+    };
+    for (const row of choiceRows) {
+      const input = row.querySelector("[data-duplicate-choice]");
+      if (input) {
+        input.addEventListener("change", syncDuplicateChoiceHighlight);
+      }
+    }
+    syncDuplicateChoiceHighlight();
+  }
+
+  const cards = document.querySelectorAll("[data-mutation-status-url]");
+  for (const card of cards) {
+    const message = card.querySelector("[data-progress-message]");
+    const poll = async () => {
+      let delay = 5000;
+      try {
+        const response = await fetch(card.dataset.mutationStatusUrl, {
+          credentials: "same-origin",
+          headers: {"Accept": "application/json"},
+        });
+        const body = await response.json();
+        if (body.status === "completed" || body.status === "rejected" || body.status === "retryable") {
+          window.location.assign(body.redirect_url);
+          return;
+        }
+        if (message) {
+          if (!card.dataset.pendingBody) {
+            card.dataset.pendingBody = message.textContent;
+          }
+          message.textContent = body.status === "unavailable"
+            ? "EasyImports is still working. Status will be checked again shortly."
+            : card.dataset.pendingBody;
+        }
+        delay = Math.max(1000, Math.min(30000, Number(body.retry_after_seconds || 2) * 1000));
+      } catch (_error) {
+        if (message) {
+          message.textContent = "EasyImports is still working. Status will be checked again shortly.";
+        }
+      }
+      window.setTimeout(poll, delay);
+    };
+    window.setTimeout(poll, 500);
+  }
+  var reviewPreparing = {% if review_preparing %}true{% else %}false{% endif %};
+  var reviewHandoffRefreshing = {% if review_handoff_refreshing %}true{% else %}false{% endif %};
+  if (reviewPreparing || reviewHandoffRefreshing) {
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2500);
+  }
+})();
+</script>
+{% endblock %}

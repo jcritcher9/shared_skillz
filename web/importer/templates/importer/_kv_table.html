@@ -1,0 +1,16 @@
+{% if rows %}
+<table class="data-table compact kv">
+  <thead><tr><th>Section</th><th>Metric</th><th>Value</th></tr></thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="muted small">{{ row.section }}</td>
+      <td>{{ row.metric }}</td>
+      <td class="mono">{{ row.value }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted small">No data.</p>
+{% endif %}

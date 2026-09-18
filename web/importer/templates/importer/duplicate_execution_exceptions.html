@@ -1,0 +1,44 @@
+{% extends "importer/base.html" %}
+{% block title %}Merge exceptions · EasyImports{% endblock %}
+{% block content %}
+<section class="card" data-merge-execution-exceptions-page>
+  <p class="eyebrow">Merge exceptions</p>
+  <h2>Groups that need attention</h2>
+  {% if aggregates %}
+  <div class="cards-grid">
+    <div class="stat-card">
+      <div class="stat-value">{{ aggregates.merged_count|default:0 }}</div>
+      <div class="stat-label">Merged</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ aggregates.needs_attention_count|default:0 }}</div>
+      <div class="stat-label">Needs attention</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ aggregates.deferred_count|default:0 }}</div>
+      <div class="stat-label">Deferred</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ aggregates.failed_count|default:0 }}</div>
+      <div class="stat-label">Failed</div>
+    </div>
+  </div>
+  {% endif %}
+  {% if exceptions %}
+  <ul data-merge-execution-exceptions>
+    {% for row in exceptions %}
+    <li>
+      Group {{ row.group_id }}{% if row.reason_code %} ({{ row.reason_code }}){% endif %}
+      — {{ row.sanitized_display }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No exception groups on this page.</p>
+  {% endif %}
+  {% if more_url %}
+  <p><a class="btn" href="{{ more_url }}">More</a></p>
+  {% endif %}
+  <p><a href="{% url 'importer:workflow' session.id %}">Back to merge results</a></p>
+</section>
+{% endblock %}

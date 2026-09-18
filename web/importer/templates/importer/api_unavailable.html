@@ -1,0 +1,25 @@
+{% extends "importer/base.html" %}
+{% block title %}EasyImports is temporarily unavailable{% endblock %}
+{% block content %}
+<section class="card setup-card">
+  <p class="eyebrow">Please try again</p>
+  <h1>EasyImports is temporarily unavailable</h1>
+  <p class="lead">
+    We couldn't load the options needed for this step. No import action was
+    started.
+  </p>
+  <div class="form-actions">
+    <a class="btn btn-primary" href="">Try again</a>
+    <a class="btn btn-ghost" href="{% url 'importer:landing' %}">Return home</a>
+  </div>
+</section>
+
+<details class="card run-details technical-details">
+  <summary><h2>Technical details</h2></summary>
+  <p class="muted">Service compatibility information for support and troubleshooting.</p>
+  <dl>
+    <dt>Expected service version</dt><dd><code>1.2.0</code></dd>
+    <dt>Failure</dt><dd>{{ technical_error|default:"The service check did not complete." }}</dd>
+  </dl>
+</details>
+{% endblock %}

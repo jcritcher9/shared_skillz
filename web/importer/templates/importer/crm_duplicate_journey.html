@@ -1,0 +1,417 @@
+{% extends "importer/base.html" %}
+{% load static %}
+{% block title %}CRM duplicate resolution · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Resolve CRM duplicates</h1>
+  <p class="lede">
+    Choose a connected CRM and Companies or People, then either scan the CRM
+    or upload an ordinary list of records. EasyImports discovers duplicate
+    groups and walks you through review before any merge is authorized.
+  </p>
+
+  <p class="muted">
+    Need a connection first?
+    <a href="{% url 'importer:crm_connections' %}">Connect a CRM</a>
+  </p>
+
+  {% if connected_count == 0 %}
+  <div class="callout callout-warn">
+    <p>
+      No connected CRM account is available yet. Connect a provider first,
+      then return here to start a journey.
+    </p>
+    <p>
+      <a class="button" href="{% url 'importer:crm_connections' %}">Connect a CRM</a>
+    </p>
+  </div>
+  {% else %}
+  <form method="post" enctype="multipart/form-data" class="stack-form" id="crm-duplicate-journey-form" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    {% if form.non_field_errors %}
+    <ul class="form-errors">
+      {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if form.form_token.errors %}
+    <ul class="form-errors">
+      {% for error in form.form_token.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="field">
+      <label for="{{ form.connection_id.id_for_label }}">{{ form.connection_id.label }}</label>
+      {{ form.connection_id }}
+      {% if form.connection_id.errors %}<div class="field-errors">{{ form.connection_id.errors }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.entity_family.id_for_label }}">{{ form.entity_family.label }}</label>
+      {{ form.entity_family }}
+      {% if form.entity_family.errors %}<div class="field-errors">{{ form.entity_family.errors }}</div>{% endif %}
+    </div>
+
+    <fieldset class="field">
+      <legend>{{ form.source_mode.label }}</legend>
+      {{ form.source_mode }}
+      {% if form.source_mode.help_text %}
+      <p class="field-help">{{ form.source_mode.help_text }}</p>
+      {% endif %}
+      {% if form.source_mode.errors %}<div class="field-errors">{{ form.source_mode.errors }}</div>{% endif %}
+    </fieldset>
+
+    <div
+      class="source-mode-panel"
+      data-source-mode-panel="uploaded_population"
+      {% if form.source_mode.value != "uploaded_population" %}hidden{% endif %}
+    >
+      <div class="callout">
+        <p>
+          Upload an ordinary CSV or Excel export of records to analyze.
+          You will map one column to <strong>Record ID</strong> on the next
+          step. EasyImports then rereads those IDs from the connected CRM.
+        </p>
+        <p class="field-help" style="margin-bottom: 0;">
+          Any header names are fine. Pre-grouped group labels are not required.
+        </p>
+      </div>
+      <div
+        class="field file-drop-zone"
+        data-file-drop="populate"
+        data-file-drop-zone
+      >
+        <label for="{{ form.population_file.id_for_label }}">{{ form.population_file.label }}</label>
+        {{ form.population_file }}
+        <p class="file-drop-hint">Or drop one CSV or Excel file here. This does not start the journey.</p>
+        <p class="file-drop-error" data-file-drop-error hidden role="alert"></p>
+        {% if form.population_file.help_text %}
+        <p class="field-help">{{ form.population_file.help_text }}</p>
+        {% endif %}
+        {% if form.population_file.errors %}<div class="field-errors">{{ form.population_file.errors }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div
+      class="source-mode-panel"
+      data-source-mode-panel="acquire_all"
+      {% if form.source_mode.value and form.source_mode.value != "acquire_all" %}hidden{% endif %}
+    >
+      <div class="callout">
+        <p>
+          Find-in-CRM reads active records for the selected object, discovers
+          duplicate groups, and opens review when analysis is ready. No file
+          upload is required.
+        </p>
+      </div>
+    </div>
+
+    <fieldset class="field" id="crm-dupe-matching-mode">
+      <legend>Matching detail</legend>
+      {{ form.matching_mode }}
+      {% if form.matching_mode.help_text %}
+      <p class="field-help">{{ form.matching_mode.help_text }}</p>
+      {% endif %}
+      {% if form.matching_mode.errors %}
+      <div class="field-errors">{{ form.matching_mode.errors }}</div>
+      {% endif %}
+    </fieldset>
+
+    <fieldset class="field" id="crm-dupe-auto-merge">
+      <legend>Optional auto-merge</legend>
+      <div class="label-with-info">
+        <label class="choice" for="{{ form.auto_merge_high_confidence.id_for_label }}">
+          {{ form.auto_merge_high_confidence }}
+          {{ form.auto_merge_high_confidence.label }}
+        </label>
+        {% include "importer/_info.html" with tip=auto_merge_info_tip %}
+      </div>
+      {% if form.auto_merge_high_confidence.help_text %}
+      <p class="field-help">{{ form.auto_merge_high_confidence.help_text }}</p>
+      {% endif %}
+      {% if form.auto_merge_high_confidence.errors %}
+      <div class="field-errors">{{ form.auto_merge_high_confidence.errors }}</div>
+      {% endif %}
+      <div
+        class="field"
+        id="crm-dupe-auto-merge-threshold"
+        {% if not form.auto_merge_high_confidence.value %}hidden{% endif %}
+      >
+        <div class="label-with-info">
+          <label for="{{ form.auto_merge_min_confidence.id_for_label }}">
+            {{ form.auto_merge_min_confidence.label }}
+          </label>
+          {% include "importer/_info.html" with tip=threshold_info_tip %}
+        </div>
+        {{ form.auto_merge_min_confidence }}
+        {% if form.auto_merge_min_confidence.help_text %}
+        <p class="field-help">{{ form.auto_merge_min_confidence.help_text }}</p>
+        {% endif %}
+        {% if form.auto_merge_min_confidence.errors %}
+        <div class="field-errors">{{ form.auto_merge_min_confidence.errors }}</div>
+        {% endif %}
+      </div>
+      {% with selected_entity=form.entity_family.value|default:"company" %}
+      <div class="score-helpers" id="crm-dupe-score-helpers">
+        <div
+          class="score-helper"
+          id="crm-dupe-score-helper-company"
+          data-score-helper="company"
+          {% if selected_entity != "company" %}hidden{% endif %}
+        >
+          <p class="field-help" style="margin-bottom: .35rem;">What Companies scores mean</p>
+          <ul class="score-helper-list">
+            {% for band in company_score_bands %}
+            <li><strong>{{ band.range }}:</strong> {{ band.text }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div
+          class="score-helper"
+          id="crm-dupe-score-helper-person"
+          data-score-helper="person"
+          {% if selected_entity != "person" %}hidden{% endif %}
+        >
+          <p class="field-help" style="margin-bottom: .35rem;">What People scores mean</p>
+          <ul class="score-helper-list">
+            {% for band in person_score_bands %}
+            <li><strong>{{ band.range }}:</strong> {{ band.text }}</li>
+            {% endfor %}
+          </ul>
+          <p class="score-helper-note muted">{{ person_audit_note }}</p>
+        </div>
+      </div>
+      {% endwith %}
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit" class="button btn btn-primary" id="crm-dupe-primary-action">
+        {% if form.source_mode.value == "uploaded_population" %}Upload and continue{% else %}Find duplicates{% endif %}
+      </button>
+    </div>
+    <div class="callout" id="crm-dupe-starting-status" role="status" aria-live="polite" hidden>
+      <p><strong>Starting read-only duplicate discovery…</strong></p>
+      <p class="muted" style="margin-bottom: 0;">
+        EasyImports is opening the journey and reading the first bounded batch
+        from HubSpot. Larger portals continue in safe batches on the progress
+        screen. No merge or CRM write is authorized by this action.
+      </p>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if journeys %}
+  <h2>Your recent CRM journeys</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Entity</th>
+          <th>Source</th>
+          <th>Status</th>
+          <th>Workflow</th>
+          <th>Resume</th>
+          <th>Abandon</th>
+          <th>Clear</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for journey in journeys %}
+        <tr>
+          <td>{{ journey.provider_label|default:journey.provider_key }}</td>
+          <td>{% if journey.entity_family == "company" %}Companies{% else %}People{% endif %}</td>
+          <td>
+            {% if journey.source_mode == "uploaded_population" %}Upload records
+            {% elif journey.source_mode == "candidate_upload" %}Pre-grouped upload
+            {% elif journey.source_mode == "selected_ids" %}Selected IDs
+            {% else %}Find in CRM{% endif %}
+          </td>
+          <td>{{ journey.status }}</td>
+          <td class="muted">{{ journey.workflow_display|default:journey.workflow_status|default:journey.run_id }}</td>
+          <td>
+            {% if journey.resume_url %}
+            <a href="{{ journey.resume_url }}">Open progress</a>
+            {% if journey.review_url %}
+            · <a href="{{ journey.review_url }}">Review groups</a>
+            {% endif %}
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if journey.can_abandon %}
+            <a class="link-danger" href="{{ journey.abandon_url }}">Abandon this journey</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="post" action="{% url 'importer:crm_duplicate_journey_clear' journey.journey_id %}">
+              {% csrf_token %}
+              <button class="link-danger" type="submit">Clear from list</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <p class="muted">
+      Redesigned start uses <code>acquire_all</code> (CRM scan) or
+      <code>uploaded_population</code> (raw file + Record ID map), then a
+      reads-only grant with implied reference acquisition. Optional
+      <code>auto_merge_min_confidence</code> (floor 90) freezes with the attempt
+      and runs a journaled auto-disposition after analysis — never from review
+      GET. Merge authorization remains a later explicit step after review.
+      The start form freezes the connection capability ceiling without asking
+      for a merge mode. Secrets and raw tenant IDs never enter this page.
+    </p>
+    {% if load_error %}
+    <p class="muted">Load error: {{ load_error }}</p>
+    {% endif %}
+    {% if api_technical %}
+    <dl class="kv">
+      {% if api_technical.route %}
+      <dt>Route</dt><dd><code>{{ api_technical.route }}</code></dd>
+      {% endif %}
+      {% if api_technical.http_status %}
+      <dt>HTTP status</dt><dd>{{ api_technical.http_status }}</dd>
+      {% endif %}
+      {% if api_technical.error_id %}
+      <dt>error_id</dt><dd><code>{{ api_technical.error_id }}</code></dd>
+      {% endif %}
+      {% if api_technical.error_code %}
+      <dt>error_code</dt><dd><code>{{ api_technical.error_code }}</code></dd>
+      {% endif %}
+    </dl>
+    {% endif %}
+    {% if providers %}
+    <p class="muted">Connectable providers: {% for p in providers %}{{ p.provider_key }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+  </details>
+
+  <p><a href="{% url 'importer:landing' %}">Back to home</a></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'importer/js/file_drop_upload.js' %}" defer></script>
+<script>
+(function () {
+  var form = document.getElementById("crm-duplicate-journey-form");
+  if (!form) return;
+  var radios = form.querySelectorAll('input[name="source_mode"]');
+  var panels = form.querySelectorAll("[data-source-mode-panel]");
+  var primary = document.getElementById("crm-dupe-primary-action");
+  var autoToggle = form.querySelector('input[name="auto_merge_high_confidence"]');
+  var thresholdWrap = document.getElementById("crm-dupe-auto-merge-threshold");
+  var thresholdInput = form.querySelector('input[name="auto_merge_min_confidence"]');
+  var entitySelect = form.querySelector('select[name="entity_family"]');
+  var startingStatus = document.getElementById("crm-dupe-starting-status");
+
+  function selectedMode() {
+    for (var i = 0; i < radios.length; i++) {
+      if (radios[i].checked) return radios[i].value;
+    }
+    return "acquire_all";
+  }
+
+  function setControlsEnabled(panel, enabled) {
+    var controls = panel.querySelectorAll("input, select, textarea, button");
+    for (var i = 0; i < controls.length; i++) {
+      if (enabled) controls[i].removeAttribute("disabled");
+      else controls[i].setAttribute("disabled", "disabled");
+    }
+  }
+
+  function clearControls(panel) {
+    var controls = panel.querySelectorAll("input, select, textarea");
+    for (var i = 0; i < controls.length; i++) {
+      var control = controls[i];
+      var type = (control.type || "").toLowerCase();
+      if (type === "file") control.value = "";
+      else if (type === "checkbox" || type === "radio") control.checked = false;
+      else if (control.tagName === "SELECT") control.selectedIndex = 0;
+      else control.value = "";
+    }
+  }
+
+  function syncAutoMerge() {
+    if (!thresholdWrap || !autoToggle) return;
+    if (autoToggle.checked) {
+      thresholdWrap.removeAttribute("hidden");
+      if (thresholdInput) thresholdInput.removeAttribute("disabled");
+    } else {
+      thresholdWrap.setAttribute("hidden", "hidden");
+      if (thresholdInput) thresholdInput.setAttribute("disabled", "disabled");
+    }
+  }
+
+  function syncScoreHelpers() {
+    var entity = entitySelect ? entitySelect.value : "company";
+    var helpers = form.querySelectorAll("[data-score-helper]");
+    for (var i = 0; i < helpers.length; i++) {
+      var helper = helpers[i];
+      if (helper.getAttribute("data-score-helper") === entity) {
+        helper.removeAttribute("hidden");
+      } else {
+        helper.setAttribute("hidden", "hidden");
+      }
+    }
+  }
+
+  function syncPanels(options) {
+    var clearHidden = !!(options && options.clearHidden);
+    var mode = selectedMode();
+    for (var i = 0; i < panels.length; i++) {
+      var panel = panels[i];
+      var show = panel.getAttribute("data-source-mode-panel") === mode;
+      if (show) {
+        panel.removeAttribute("hidden");
+        setControlsEnabled(panel, true);
+      } else {
+        if (clearHidden) clearControls(panel);
+        setControlsEnabled(panel, false);
+        panel.setAttribute("hidden", "hidden");
+      }
+    }
+    if (primary) {
+      primary.textContent = mode === "uploaded_population"
+        ? "Upload and continue"
+        : "Find duplicates";
+    }
+  }
+
+  for (var i = 0; i < radios.length; i++) {
+    radios[i].addEventListener("change", function () {
+      syncPanels({ clearHidden: true });
+    });
+  }
+  if (autoToggle) {
+    autoToggle.addEventListener("change", syncAutoMerge);
+  }
+  if (entitySelect) {
+    entitySelect.addEventListener("change", syncScoreHelpers);
+  }
+  syncPanels({ clearHidden: false });
+  syncAutoMerge();
+  syncScoreHelpers();
+  form.addEventListener("submit", function () {
+    if (form.getAttribute("aria-busy") === "true") return;
+    form.setAttribute("aria-busy", "true");
+    if (startingStatus) startingStatus.removeAttribute("hidden");
+    if (primary) {
+      primary.disabled = true;
+      primary.textContent = selectedMode() === "uploaded_population"
+        ? "Uploading records…"
+        : "Starting read-only scan…";
+    }
+  });
+})();
+</script>
+{% endblock %}

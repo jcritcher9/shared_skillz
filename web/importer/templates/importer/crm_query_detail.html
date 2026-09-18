@@ -1,0 +1,122 @@
+{% extends "importer/base.html" %}
+{% block title %}CRM query results · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>CRM query results</h1>
+  <p class="muted"><a href="{% url 'importer:crm_query' %}">← All CRM queries</a></p>
+
+  {% if load_error %}
+  <div class="callout callout-warn"><p>{{ load_error }}</p></div>
+  {% endif %}
+
+  {% if query %}
+  <dl class="summary-list">
+    <div><dt>Query</dt><dd class="mono">{{ query.query_id }}</dd></div>
+    <div><dt>Status</dt><dd>{{ query.status }}</dd></div>
+    <div><dt>Mode</dt><dd>{{ query.mode }}</dd></div>
+    <div><dt>Family</dt><dd>{{ query.object_family }}</dd></div>
+    <div><dt>Provider</dt><dd>{{ query.provider_label|default:query.provider_key }}</dd></div>
+    <div><dt>Rows</dt><dd>{{ query.row_count|default:"—" }}</dd></div>
+    <div><dt>Workflow</dt><dd class="mono">{{ query.run_id }}</dd></div>
+  </dl>
+
+  {% if query.status != "snapshot_ready" and not page %}
+  <div class="callout">
+    <p>
+      Snapshot not ready yet. Open the workflow, authorize CRM_QUERY execute,
+      then return here to page frozen rows.
+    </p>
+    <p class="muted">Workflow status: {{ query.workflow_status|default:"unknown" }}</p>
+  </div>
+  {% endif %}
+
+  {% if page %}
+  <h2>Rows (frozen snapshot)</h2>
+  <p class="muted">
+    Showing {{ page.returned }} of {{ page.total_rows }}
+    (offset {{ page.offset }}).
+  </p>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% for col in page.columns %}
+          <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in page.rows %}
+        <tr>
+          {% for cell in row %}
+          <td>{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ page.columns|length }}">No rows on this page.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page.has_more and page.next_cursor %}
+  <p>
+    <a class="button" href="?cursor={{ page.next_cursor|urlencode }}&page_size={{ page.page_size }}">
+      Next page
+    </a>
+  </p>
+  {% endif %}
+
+  <h2>Hand off selected IDs to duplicate resolution (H1-A)</h2>
+  <p class="muted">
+    Paste record IDs that appear in this frozen query snapshot. EasyImports will
+    re-read them from the CRM and discover groups — this never auto-starts merge
+    or import. Query id and result digest are locked to this page.
+  </p>
+  <form method="post" class="stack-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="handoff" />
+    <input type="hidden" name="form_token" value="{{ handoff_form_token }}" />
+    <input type="hidden" name="query_id" value="{{ query.query_id }}" />
+    <input type="hidden" name="query_result_digest" value="{{ query.result_digest }}" />
+    <input type="hidden" name="connection_id" value="{{ query.connection_id }}" />
+    <input type="hidden" name="object_family" value="{{ query.object_family }}" />
+    <div class="field">
+      <label for="selected_ids">Selected record IDs</label>
+      <textarea name="selected_ids" id="selected_ids" rows="4" spellcheck="false"
+        placeholder="Paste record_id values from this snapshot (comma or newline separated)">{{ handoff_selected_ids|default:"" }}</textarea>
+      <p class="field-help">
+        Same form retries converge (double-submit safe). Change the selection
+        after a rejection uses a fresh form token.
+      </p>
+    </div>
+    <div class="field">
+      <label for="duplicate_execution_maximum">Maximum CRM change level</label>
+      <select name="duplicate_execution_maximum" id="duplicate_execution_maximum">
+        <option value="dry_run"{% if handoff_max_mode != "execute" and handoff_max_mode != "preview" and handoff_max_mode != "disabled" %} selected{% endif %}>Dry run (recommended)</option>
+        <option value="execute"{% if handoff_max_mode == "execute" %} selected{% endif %}>Allow execute later</option>
+        <option value="preview"{% if handoff_max_mode == "preview" %} selected{% endif %}>Preview only</option>
+        <option value="disabled"{% if handoff_max_mode == "disabled" %} selected{% endif %}>Disabled</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="button btn btn-primary">
+        Start duplicate journey from selection
+      </button>
+    </div>
+  </form>
+  {% endif %}
+
+  <h2>Delete query</h2>
+  <p class="muted">
+    Removes the query resource and frozen snapshot (journaled; safe to retry).
+  </p>
+  <form method="post" class="stack-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ delete_form_token }}" />
+    <button type="submit" class="button btn btn-danger">Delete this query</button>
+  </form>
+  {% else %}
+  <p>Query not found or not accessible.</p>
+  {% endif %}
+</section>
+{% endblock %}

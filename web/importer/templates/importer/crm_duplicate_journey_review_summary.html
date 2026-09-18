@@ -1,0 +1,202 @@
+{% extends "importer/base.html" %}
+{% block title %}Review summary — EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Review summary</h1>
+  <p class="lede">
+    {{ terminal_message }}
+    Inspect the reviewed-result counts before approving the merge plan.
+    Allowed actions follow the stored group contract.
+  </p>
+
+  {% if form_errors %}
+  <ul class="errorlist">
+    {% for err in form_errors %}<li>{{ err }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if oversized_quarantine_unavailable %}
+  <div class="callout" data-oversized-quarantine-unavailable="1" role="alert"><p>{{ oversized_quarantine_unavailable }}</p></div>
+  {% elif oversized_quarantine_components %}
+  <div class="callout" data-oversized-quarantine="1">
+    <h2>Oversized components (not duplicate groups)</h2>
+    <p>These records were too large to auto-resolve and were quarantined.</p>
+    <ul>
+      {% for item in oversized_quarantine_components %}
+      <li>{% for mid in item.member_ids %}<code>{{ mid }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if reviewed_result %}
+  <dl class="summary-grid" data-review-summary-counts="1">
+    <div>
+      <dt>Records analyzed</dt>
+      <dd>{{ reviewed_result.analyzed_record_count }}</dd>
+    </div>
+    <div>
+      <dt>Duplicate groups found</dt>
+      <dd>{{ reviewed_result.total_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Auto-approved (high confidence)</dt>
+      <dd>{{ auto_approved_group_count|default:0 }}</dd>
+    </div>
+    <div>
+      <dt>Approved by operator</dt>
+      <dd>{{ operator_approved_group_count|default:reviewed_result.approved_merge_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Approved for merge (total)</dt>
+      <dd>{{ reviewed_result.approved_merge_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Quarantined (no merge)</dt>
+      <dd>{{ reviewed_result.quarantined_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Survivors / losers</dt>
+      <dd>{{ reviewed_result.survivor_count }} / {{ reviewed_result.loser_count }}</dd>
+    </div>
+  </dl>
+  <p>
+    <a href="{{ edit_dispositions_url }}" data-edit-dispositions="1">{{ edit_dispositions_label|default:"Edit dispositions" }}</a>
+    to return to group review.
+  </p>
+  {% else %}
+  <p>Reviewed-result summary is not available yet.</p>
+  {% endif %}
+
+  {% if edit_dispositions and disposition_window %}
+  <form method="post" class="stack">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="summary_action" value="amend">
+    <input type="hidden" name="expected_revision" value="{{ disposition_window.expected_revision }}">
+    <input type="hidden" name="expected_decision_set_content_digest" value="{{ disposition_window.decision_set_content_digest }}">
+    <input type="hidden" name="reviewed_result_content_digest" value="{{ disposition_window.reviewed_result_content_digest }}">
+    <input type="hidden" name="window_token" value="{{ disposition_window.window_token }}">
+    <input type="hidden" name="window_cursor" value="{{ window_cursor }}">
+    <input type="hidden" name="expanded_group_id" value="{{ expanded_group_id }}">
+    <input type="hidden" name="group_order" value="{% for item in disposition_window.dispositions %}{{ item.group_id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+
+    <h2>Edit group dispositions</h2>
+    {% for item in disposition_window.dispositions %}
+    <input type="hidden" name="recommended_{{ item.group_id }}" value="{{ item.recommended_survivor_id|default:'' }}">
+    <input type="hidden" name="advanced_{{ item.group_id }}" value="{% if item.advanced_review_required %}1{% else %}0{% endif %}">
+    <input type="hidden" name="allowed_{{ item.group_id }}" value="{{ item.allowed_actions|join:',' }}">
+    <input type="hidden" name="action_{{ item.group_id }}" value="{% if item.disposition == 'approved' %}approve{% elif item.disposition == 'declined' %}decline{% else %}quarantine{% endif %}">
+    <input type="hidden" name="survivor_{{ item.group_id }}" value="{{ item.selected_survivor_id|default:'' }}">
+    {% if item.disposition != "declined" %}
+    <div class="group-card">
+      <p>
+        <strong>Group {{ item.group_id }}</strong> — {{ item.disposition }}
+        {% if item.group_status == "quarantined" %}(quarantined){% endif %}
+        {% if item.advanced_review_required %}(advanced review){% endif %}
+        {% if item.group_id != expanded_group_id %}
+        · <a href="{{ item.edit_url }}">Edit group</a>
+        {% endif %}
+      </p>
+
+      {% if item.group_id == expanded_group_id %}
+      <details open>
+      <summary>
+        Choose the outcome for group {{ item.group_id }}
+      </summary>
+      <input type="hidden" name="eligible_{{ item.group_id }}" value="{% for m in item.members %}{% if m.survivor_eligible %}{{ m.record_id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}">
+
+      {% if "approve" in item.allowed_actions or "override_survivor" in item.allowed_actions %}
+      <p>Eligible survivors (ranking-eligible only):</p>
+      {% for m in item.members %}
+        {% if m.survivor_eligible %}
+        <label class="choice">
+          <input type="radio" name="survivor_{{ item.group_id }}" value="{{ m.record_id }}" {% if item.selected_survivor_id == m.record_id and item.disposition == "approved" %}checked{% endif %}>
+          <code>{{ m.record_id }}</code>
+          {% if m.recommended %}(recommended){% endif %}
+          {% if item.selected_survivor_id == m.record_id and item.disposition == "approved" %}(current){% endif %}
+        </label>
+        {% endif %}
+      {% empty %}
+      <p>No eligible survivors.</p>
+      {% endfor %}
+      {% if "approve" in item.allowed_actions %}
+      <label class="choice">
+        <input type="radio" name="action_{{ item.group_id }}" value="approve" {% if item.disposition == "approved" %}checked{% endif %}>
+        Approve selected survivor
+      </label>
+      {% endif %}
+      {% endif %}
+
+      {% if "decline" in item.allowed_actions %}
+      <label class="choice">
+        <input type="radio" name="action_{{ item.group_id }}" value="decline" {% if item.disposition == "declined" %}checked{% endif %}>
+        Do not merge this group
+      </label>
+      {% endif %}
+      {% if "quarantine" in item.allowed_actions %}
+      <label class="choice">
+        <input type="radio" name="action_{{ item.group_id }}" value="quarantine" {% if item.disposition == "quarantined" %}checked{% endif %}>
+        Quarantine for manual resolution
+      </label>
+      {% endif %}
+      </details>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% empty %}
+    <p>No dispositions recorded.</p>
+    {% endfor %}
+
+    <button type="submit" class="button primary">Save disposition changes</button>
+    <p class="hint">
+      Saving replaces every outcome in this window and preserves all unseen
+      groups. Available only before the merge plan is approved.
+    </p>
+  </form>
+
+  <nav class="actions" aria-label="Disposition pages">
+    {% if previous_window_url %}<a class="button secondary" href="{{ previous_window_url }}">Previous groups</a>{% endif %}
+    {% if next_window_url %}<a class="button secondary" href="{{ next_window_url }}">Next groups</a>{% endif %}
+  </nav>
+  {% endif %}
+
+  <p class="actions">
+    <a class="button btn btn-primary" href="{{ merge_url }}">Continue to approve merge plan</a>
+    <a class="button secondary" href="{{ progress_url }}">Progress</a>
+    <a href="{{ workflow_url }}">Workflow details</a> ·
+    <a href="{{ start_url }}">CRM duplicates home</a>
+  </p>
+
+  {% if reviewed_result or disposition_window %}
+  <details class="technical">
+    <summary>Technical details</summary>
+    <ul>
+      <li>Review run: <code>{{ run_id }}</code></li>
+      {% if disposition_window %}
+      <li>Decision-set content digest: <code>{{ disposition_window.decision_set_content_digest }}</code></li>
+      <li>Reviewed-result content digest: <code>{{ disposition_window.reviewed_result_content_digest }}</code></li>
+      {% elif reviewed_result %}
+      <li>Decision-set content digest: <code>{{ reviewed_result.decision_set_content_digest }}</code></li>
+      {% if reviewed_result.reviewed_result_content_digest %}<li>Reviewed-result content digest: <code>{{ reviewed_result.reviewed_result_content_digest }}</code></li>{% endif %}
+      {% endif %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+{% if edit_dispositions %}
+<script>
+(function () {
+  document.querySelectorAll('input[name^="survivor_"]').forEach(function (el) {
+    el.addEventListener("change", function () {
+      var group = el.name.replace("survivor_", "");
+      var approve = document.querySelector(
+        'input[name="action_' + group + '"][value="approve"]'
+      );
+      if (approve) approve.checked = true;
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

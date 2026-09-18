@@ -1,0 +1,60 @@
+{% extends "importer/base.html" %}
+
+{% block title %}Pricing &middot; EasyImports{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>Pricing</h1>
+  <p class="muted">Pay securely through our WooCommerce store.</p>
+</section>
+
+<div class="pricing-layout">
+  <section class="card plan-card">
+    <div class="plan-badge">Most popular</div>
+    <h2 class="plan-name">{{ plan_name }}</h2>
+    <div class="plan-price">{{ price_label }}</div>
+    <ul class="plan-features">
+      <li>Unlimited list-import runs</li>
+      <li>Account &amp; contact/lead matching</li>
+      <li>Duplicate detection &amp; review tables</li>
+      <li>Salesforce Data Import Wizard-ready files</li>
+      <li>Priority support</li>
+    </ul>
+
+    {% if payment_available %}
+    <form method="post" action="{% url 'importer:checkout' %}" class="checkout-form">
+      {% csrf_token %}
+      <div class="field">
+        {{ form.email.label_tag }}
+        {{ form.email }}
+        <p class="muted small">{{ form.email.help_text }}</p>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg btn-woo">
+        <span class="woo-mark">Woo</span> Pay with WooCommerce
+      </button>
+      <p class="muted small secure-note">You'll be redirected to our secure WooCommerce checkout.</p>
+    </form>
+    {% else %}
+    <div class="notice">
+      <strong>Payments aren't configured yet.</strong>
+      <p class="muted small">
+        Set the <code>WOOCOMMERCE_*</code> environment variables (store URL, REST
+        consumer key/secret, and product ID) to enable checkout.
+      </p>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="card pricing-aside">
+    <h3>How WooCommerce checkout works</h3>
+    <ol class="how-list">
+      <li>Click <em>Pay with WooCommerce</em>.</li>
+      <li>We create your order and send you to the WooCommerce payment page.</li>
+      <li>Complete payment; WooCommerce sends you back here.</li>
+    </ol>
+    <p class="muted small">
+      Powered by your WooCommerce store via the WooCommerce REST API.
+    </p>
+  </aside>
+</div>
+{% endblock %}

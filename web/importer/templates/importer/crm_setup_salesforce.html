@@ -1,0 +1,148 @@
+{% extends "importer/base.html" %}
+{% block title %}Salesforce setup · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{% if edit_mode %}Edit Salesforce Connected App{% else %}Set up Salesforce{% endif %}</h1>
+  <p class="lede">
+    {% if edit_mode %}
+    Update Connected App credentials on this device. Saving replaces the prior
+    registration (one app per provider). Secrets stay vaulted by the API —
+    Django never keeps client secrets.
+    {% else %}
+    Register a Connected App on this device, then connect your org. Secrets are
+    stored by the API vault — Django never keeps client secrets.
+    {% endif %}
+  </p>
+
+  <ol class="muted small" style="margin-bottom: 1.2rem;">
+    <li>Choose a CRM</li>
+    <li><strong>Connected App credentials</strong></li>
+    <li>Connect org</li>
+  </ol>
+
+  {% if stuck_registration_put and start_over_form_token %}
+  <div class="callout" style="margin-bottom: 1rem;" role="status">
+    <p>
+      <strong>Stuck Salesforce registration</strong> — a prior save ended UNKNOWN.
+      EasyImports will check whether credentials already committed before clearing
+      the journal pin. Cookie clearing is not required.
+    </p>
+    <form
+      method="post"
+      action="{% url 'importer:registration_start_over' 'salesforce' %}"
+      class="stack"
+    >
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ start_over_form_token }}" />
+      <input type="hidden" name="next" value="{% url 'importer:crm_setup_salesforce' %}" />
+      <button type="submit" class="btn btn-primary">
+        Start over with different credentials
+      </button>
+    </form>
+  </div>
+  {% endif %}
+  {% include "importer/_api_technical_details.html" with api_technical=api_technical %}
+
+  <h2>Connected App checklist</h2>
+  <ul class="muted">
+    <li>Create a Connected App in Salesforce (or use an existing one).</li>
+    <li>Enable OAuth; set the callback URL exactly as below.</li>
+    <li>Copy the Consumer Key (client ID) and Consumer Secret.</li>
+  </ul>
+  <p>
+    Callback URL (paste into Salesforce — not editable):
+    <code>{{ callback_uri }}</code>
+  </p>
+
+  <form
+    method="post"
+    action="{% url 'importer:crm_setup_salesforce_save' %}"
+    class="stack"
+    autocomplete="off"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ save_token }}" />
+
+    <div class="field">
+      <label for="sf-label">Label</label>
+      <input
+        id="sf-label"
+        type="text"
+        name="label"
+        required
+        placeholder="Work sandbox"
+        value="{{ draft.label }}"
+      />
+    </div>
+
+    <div class="field">
+      <label for="sf-env">Login environment</label>
+      <select id="sf-env" name="login_environment" required>
+        {% for value, label in login_environments %}
+        <option
+          value="{{ value }}"
+          {% if draft.login_environment == value %}selected{% elif not draft.login_environment and value == "sandbox" %}selected{% endif %}
+        >
+          {{ label }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="sf-client-id">Client ID (Consumer Key)</label>
+      <input
+        id="sf-client-id"
+        type="text"
+        name="client_id"
+        required
+        autocomplete="off"
+        value="{{ draft.client_id }}"
+      />
+    </div>
+
+    <div class="field">
+      <label for="sf-client-secret">Client secret (Consumer Secret)</label>
+      <input
+        id="sf-client-secret"
+        type="password"
+        name="client_secret"
+        required
+        autocomplete="new-password"
+      />
+      <p class="field-help muted">
+        Never stored in the browser draft or Django durable journal — only sent
+        once to the API vault.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="sf-mydomain">My Domain host (optional)</label>
+      <input
+        id="sf-mydomain"
+        type="text"
+        name="my_domain_host"
+        placeholder="mycompany.my.salesforce.com"
+        value="{{ draft.my_domain_host }}"
+      />
+    </div>
+
+    <div class="field">
+      <label for="sf-org">Expected org Id (optional)</label>
+      <input
+        id="sf-org"
+        type="text"
+        name="expected_org_id"
+        placeholder="00D…"
+        value="{{ draft.expected_org_id }}"
+      />
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save Connected App</button>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_setup_pick' %}">Back</a>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

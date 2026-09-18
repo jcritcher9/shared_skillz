@@ -5,7 +5,8 @@ thin Claude / Grok / Codex adapters. Drop this tree into a git repo (or
 clone it as the repo) so agents share one worker, critic, worktree, and
 scoping-document contract.
 
-This is **not** Shuttle, Salesforce skills, or area binders.
+This is **not** Shuttle, Salesforce skills, or area binders. It does include
+the Django operator UI under `web/`.
 
 ## What is in the package
 
@@ -25,6 +26,7 @@ This is **not** Shuttle, Salesforce skills, or area binders.
 | `/create-agent-skill` | Add another runtime-neutral skill the same way. |
 | `agent_protocol/kernel.md` | Shared status vocabulary, `$py`, I/P identity. Worker and critic both read it. |
 | `agent_protocol/worker-area.md` | Area-only `/worker` dispatch (queue propose-and-wait). |
+| `web/` | Django operator UI (`web/manage.py`). Tracked source only: no `db.sqlite3`, no `media/` session CSVs. Living docs are in `web/codex_context/`. The UI talks to an HTTP API that is **not** in this package. |
 
 `accept-and-land` and `closeout` are included because `/worker` and
 `/worker-critic-loop` stop at “propose landing”; they do not land unless
@@ -42,6 +44,7 @@ stay valid (`../../../agent_protocol/<name>.md` from each skill directory):
 agent_protocol/
 implementation_notes_strategy.md
 CONTEXT_PILLARS.md
+web/
 .claude/skills/<name>/SKILL.md
 .grok/skills/<name>/SKILL.md
 .agents/skills/<name>/SKILL.md

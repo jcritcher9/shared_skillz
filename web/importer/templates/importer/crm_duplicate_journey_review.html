@@ -1,0 +1,307 @@
+{% extends "importer/base.html" %}
+{% block title %}{{ heading }} · EasyImports{% endblock %}
+{% block body_class %}review-page{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{{ heading }}</h1>
+  {% if auto_disposition_root_missing %}
+  <div class="callout callout-warn" data-auto-disposition-root-missing>
+    <p>This session cannot retry automatic approval because its form identity is missing. Start this journey again.</p>
+  </div>
+  {% elif auto_disposition_needs_attention %}
+  <div class="callout callout-warn" data-auto-disposition-needs-attention>
+    <p>Automatic approval needs attention. Open progress or retry the saved action. This page did not start a replacement attempt.</p>
+  </div>
+  {% elif auto_disposition_cta_token %}
+  <form method="post" class="stack-form" data-auto-disposition-cta>
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ auto_disposition_cta_token }}">
+    <input type="hidden" name="auto_disposition_cta" value="1">
+    <p>High-confidence groups can now be approved automatically. This does not change records in your CRM.</p>
+    <div class="form-actions">
+      <button type="submit" class="button btn btn-primary">Approve queued high-confidence groups</button>
+    </div>
+  </form>
+  {% endif %}
+  {% if frontier_wait %}
+  <p class="lede" data-frontier-wait{% if auto_queued_wait %} data-auto-queued-wait{% endif %}>{{ frontier_wait_copy }}</p>
+  <p class="muted" data-review-wait-copy>Still working. Refresh this page to check again. GET does not start more work.</p>
+  <div class="form-actions">
+    <a class="button btn btn-primary" href="{{ refresh_url }}" data-review-wait-refresh>Refresh status</a>
+    {% if progress_url %}<a class="button btn" href="{{ progress_url }}">Back to progress</a>{% endif %}
+    {% if workflow_url %}<a class="button btn" href="{{ workflow_url }}">Open workflow details</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="lede">
+    Compare each group’s records, keep the recommended survivor or choose another
+    allowed outcome, then save this window. Each group is independent — a choice
+    in one group does not change another.
+  </p>
+  {% endif %}
+  {% if not frontier_wait %}
+  <p class="muted">
+    Progress: {{ decided_group_count }} decided · {{ remaining_group_count }} remaining
+    (including this window).
+  </p>
+  {% if auto_approved_group_count %}
+  <p class="muted">
+    Auto-approved {{ auto_approved_group_count }} high-confidence group{{ auto_approved_group_count|pluralize }}
+    {% if auto_merge_min_confidence %}(threshold {{ auto_merge_min_confidence }}){% endif %}.
+    Those groups are not listed here.
+  </p>
+  {% endif %}
+
+  {% if form_errors %}
+  <ul class="form-errors">
+    {% for err in form_errors %}<li>{{ err }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post" class="stack-form" id="crm-duplicate-review-form" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="window_id" value="{{ window.window_id }}">
+    <input type="hidden" name="window_digest" value="{{ window.window_digest }}">
+    <input type="hidden" name="expected_revision" value="{{ window.expected_revision }}">
+    <input type="hidden" name="group_order" value="{{ group_order }}">
+    <input type="hidden" name="review_cursor" value="{{ review_cursor|default:'' }}">
+    <input type="hidden" name="review_next_cursor" value="{{ review_next_cursor|default:'' }}">
+
+    <div class="form-actions review-window-actions">
+      <button type="submit" class="button btn btn-primary" name="review_submit" value="save">{{ cta_label }}</button>
+      {% if show_end_early %}
+      <button type="submit" class="button btn" name="review_submit" value="end_early">End early</button>
+      {% endif %}
+      {% if show_save_and_exit %}
+      <a class="button btn" href="{{ start_url }}">Save and exit</a>
+      {% endif %}
+    </div>
+    {% if show_end_early %}
+    <p class="muted">
+      End early takes you to the merge plan with only the groups you already
+      decided. Remaining groups stay unchanged in your CRM.
+    </p>
+    {% endif %}
+
+    {% for card in cards %}
+    <fieldset class="review-group-card" data-group-id="{{ card.group_id }}">
+      <input type="hidden" name="group_revision_{{ card.group_id }}" value="{{ card.group_revision }}">
+      <input type="hidden" name="allowed_{{ card.group_id }}" value="{{ card.allowed_actions|join:',' }}">
+      <input type="hidden" name="recommended_{{ card.group_id }}" value="{{ card.recommended_survivor_id|default:'' }}">
+      <input type="hidden" name="eligible_{{ card.group_id }}" value="{% for m in card.survivor_choices %}{{ m.record_id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+      <input type="hidden" name="advanced_{{ card.group_id }}" value="{% if card.advanced_review_required %}1{% else %}0{% endif %}">
+      <legend>
+        Group {{ forloop.counter }} of {{ cards|length }}
+        <span class="muted">· {{ card.group_status }} · {{ card.review_lane }} ·
+          {{ card.confidence_band }}{% if card.confidence_score is not None %} ({{ card.confidence_score }}){% endif %}
+        </span>
+      </legend>
+
+      {% if card.winner_sentence %}
+      <p class="winner-reason" data-winner-reason="{{ card.winner_reason_id }}">
+        {{ card.winner_sentence }}
+      </p>
+      {% endif %}
+
+      {% if card.advanced_review_required %}
+      <div class="callout callout-warn">
+        <p>Advanced review is required for this group. Only the outcomes listed below are available.</p>
+      </div>
+      {% endif %}
+
+      {% if card.execution_blockers %}
+      <div class="callout callout-warn">
+        <p><strong>Execution blockers</strong></p>
+        <ul>
+          {% for blocker in card.execution_blockers %}<li>{{ blocker }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="table-wrap">
+        <table class="data-table review-members">
+          <thead>
+            <tr>
+              {% if card.show_survivor_radios %}<th scope="col">Survivor</th>{% endif %}
+              <th scope="col">Record ID</th>
+              {% for col in card.field_columns %}
+              <th scope="col">{{ col.operator_label }}</th>
+              {% endfor %}
+              <th scope="col">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in card.members %}
+            <tr class="{% if member.selected %}is-selected{% endif %}{% if member.recommended %} is-recommended{% endif %}">
+              {% if card.show_survivor_radios %}
+              <td>
+                {% if member.survivor_eligible %}
+                <label class="sr-only" for="survivor_{{ card.group_id }}_{{ member.record_id }}">
+                  Select {{ member.record_id }} as survivor
+                </label>
+                <input
+                  type="radio"
+                  name="survivor_{{ card.group_id }}"
+                  id="survivor_{{ card.group_id }}_{{ member.record_id }}"
+                  value="{{ member.record_id }}"
+                  {% if card.survivor_id == member.record_id %}checked{% endif %}
+                >
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+              </td>
+              {% endif %}
+              <td><code>{{ member.record_id }}</code></td>
+              {% for cell in member.cells %}
+              <td>{{ cell }}</td>
+              {% endfor %}
+              <td class="muted">
+                {% if member.recommended %}Recommended{% endif %}
+                {% if not member.survivor_eligible %} · not eligible as survivor{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="muted">No member rows in this group.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="field outcome-field">
+        <p class="field-label">Outcome for this group</p>
+        {% if "approve" in card.allowed_actions or "override_survivor" in card.allowed_actions %}
+        <label class="choice">
+          <input
+            type="radio"
+            name="action_{{ card.group_id }}"
+            value="approve"
+            {% if card.action == "approve" or card.action == "override_survivor" %}checked{% endif %}
+          >
+          Merge into selected survivor
+          {% if card.recommended_survivor_id %}
+          <span class="muted">(recommended: <code>{{ card.recommended_survivor_id }}</code>)</span>
+          {% endif %}
+        </label>
+        {% endif %}
+        {% if "decline" in card.allowed_actions %}
+        <label class="choice">
+          <input
+            type="radio"
+            name="action_{{ card.group_id }}"
+            value="decline"
+            {% if card.action == "decline" %}checked{% endif %}
+          >
+          Do not merge this group
+        </label>
+        {% endif %}
+        {% if "quarantine" in card.allowed_actions %}
+        <label class="choice">
+          <input
+            type="radio"
+            name="action_{{ card.group_id }}"
+            value="quarantine"
+            {% if card.action == "quarantine" %}checked{% endif %}
+          >
+          Quarantine for manual resolution
+        </label>
+        {% endif %}
+        {% if not card.allowed_actions %}
+        <p class="field-errors">No allowed outcomes for this group.</p>
+        {% endif %}
+      </div>
+
+      {% with field_merge=card.field_merge %}
+      {% include "importer/_field_merge_plan.html" %}
+      {% endwith %}
+
+      {% if card.conflicts or card.evidence %}
+      <details class="review-evidence-block">
+        <summary>Show evidence and conflicts</summary>
+        {% if card.evidence %}
+        <h3 class="field-label">Evidence</h3>
+        <ul class="review-evidence-list">
+          {% for row in card.evidence %}
+          <li>
+            {% if row.items %}
+              {% for key, value in row.items %}
+                <span class="muted">{{ key }}:</span> {{ value }}{% if not forloop.last %}; {% endif %}
+              {% endfor %}
+            {% else %}
+              {{ row }}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if card.conflicts %}
+        <h3 class="field-label">Conflicts</h3>
+        <ul class="review-evidence-list">
+          {% for row in card.conflicts %}
+          <li>
+            {% if row.items %}
+              {% for key, value in row.items %}
+                <span class="muted">{{ key }}:</span> {{ value }}{% if not forloop.last %}; {% endif %}
+              {% endfor %}
+            {% else %}
+              {{ row }}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </details>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+
+    <div class="form-actions">
+      <button type="submit" class="button btn btn-primary" name="review_submit" value="save">{{ cta_label }}</button>
+      {% if show_end_early %}
+      <button type="submit" class="button btn" name="review_submit" value="end_early">End early</button>
+      {% endif %}
+      {% if show_save_and_exit %}
+      <a class="button btn" href="{{ start_url }}">Save and exit</a>
+      {% endif %}
+      <a class="button btn" href="{{ progress_url }}">Back to progress</a>
+      <a class="button btn" href="{{ workflow_url }}">Open workflow details</a>
+      <a class="button btn" href="{{ start_url }}">Start another journey</a>
+    </div>
+  </form>
+  {% endif %}
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <p class="muted">
+      Run <code>{{ run_id }}</code>.
+      Window <code>{{ window.window_id }}</code>.
+      Digest <code>{{ window.window_digest }}</code>.
+      Revision <code>{{ window.expected_revision }}</code>.
+      Exact retry reuses the journaled window submit.
+    </p>
+  </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var frontierWait = {% if frontier_wait %}true{% else %}false{% endif %};
+  if (frontierWait) {
+    return;
+  }
+  // Optional: highlight selected survivor row without affecting server names.
+  document.querySelectorAll(".review-group-card").forEach(function (card) {
+    var name = "survivor_" + card.getAttribute("data-group-id");
+    card.querySelectorAll('input[type="radio"][name="' + name + '"]').forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        card.querySelectorAll("tr.is-selected").forEach(function (row) {
+          row.classList.remove("is-selected");
+        });
+        var row = radio.closest("tr");
+        if (row) row.classList.add("is-selected");
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "importer/base.html" %}
+{% block title %}EasyImports{% endblock %}
+{% block content %}
+<section class="home-shell">
+  <div class="home-copy">
+    <p class="eyebrow">Clean data. Clear decisions.</p>
+    <h1>Prepare CRM imports with confidence.</h1>
+    <p class="home-sub">
+      Add your files, review anything that needs attention, and download clean
+      results without losing track of what happened.
+    </p>
+    <div class="home-actions">
+      <form method="post" action="{% url 'importer:start_session' %}">
+        {% csrf_token %}
+        <button class="btn btn-primary btn-lg" type="submit">Start an import</button>
+      </form>
+      <a class="btn btn-secondary btn-lg" href="{% url 'importer:crm_connections' %}">
+        Connect CRM
+      </a>
+      <a class="btn btn-ghost btn-lg" href="{% url 'importer:crm_duplicate_journey' %}">
+        Resolve CRM duplicates
+      </a>
+    </div>
+  </div>
+  <div class="home-visual" aria-hidden="true">
+    <div class="brand-graphic">
+      <div class="brand-stream stream-rough">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="brand-centerpiece">
+        <span class="brand-mark-xl">EI</span>
+        <span class="brand-sweep sweep-a"></span>
+        <span class="brand-sweep sweep-b"></span>
+      </div>
+      <div class="brand-stream stream-clean">
+        <span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="home-pipeline" aria-label="How EasyImports works">
+  <article class="pipeline-stage">
+    <span class="stage-num">01</span>
+    <h2>Add your files</h2>
+    <p class="muted">Upload the source data and any reference files you already have.</p>
+  </article>
+  <article class="pipeline-stage">
+    <span class="stage-num">02</span>
+    <h2>Review the plan</h2>
+    <p class="muted">Choose safeguards, matching behavior, and whether changes are allowed.</p>
+  </article>
+  <article class="pipeline-stage">
+    <span class="stage-num">03</span>
+    <h2>Download results</h2>
+    <p class="muted">Resolve any questions and download the prepared output.</p>
+  </article>
+</section>
+
+{% if recent_sessions %}
+<section class="card recent-runs">
+  <h2>Recent imports</h2>
+  <p class="muted">Continue where you left off or review a completed result.</p>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Import</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+      <tbody>
+      {% for row in recent_sessions %}
+        <tr>
+          <td>{{ row.product_label }}</td>
+          <td><span class="status status-{{ row.status_tone }}">{{ row.status_label }}</span></td>
+          <td>{{ row.session.updated_at }}</td>
+          <td class="row-actions">
+            <a href="{% if row.session.active_workflow_id %}{% url 'importer:workflow' row.session.id %}{% elif row.session.product_key %}{% url 'importer:upload' row.session.id %}{% else %}{% url 'importer:product' row.session.id %}{% endif %}">
+              {{ row.action_label }}
+            </a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

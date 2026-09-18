@@ -1,0 +1,34 @@
+{% extends "importer/base.html" %}
+{% block title %}CRM connected · EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Connected</h1>
+  <p class="lede">
+    {% if draft.provider_label %}
+    <strong>{{ draft.provider_label }}</strong> is ready to use.
+    {% else %}
+    Your CRM connection is ready to use.
+    {% endif %}
+  </p>
+
+  {% if draft.connection_id %}
+  <p class="muted small">Connection id: <code>{{ draft.connection_id }}</code></p>
+  {% endif %}
+
+  <div class="form-actions" style="margin-top: 1.4rem;">
+    <form method="post" action="{% url 'importer:start_session' %}">
+      {% csrf_token %}
+      <button class="btn btn-primary" type="submit">Start an import</button>
+    </form>
+    <a class="btn" href="{% url 'importer:crm_duplicate_journey' %}">
+      Resolve CRM duplicates
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_connections' %}">
+      Manage connections
+    </a>
+    <a class="btn btn-ghost" href="{% url 'importer:crm_setup_start' %}">
+      Set up another CRM
+    </a>
+  </div>
+</section>
+{% endblock %}

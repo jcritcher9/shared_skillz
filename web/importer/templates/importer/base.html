@@ -1,0 +1,70 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}EasyImports{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236c8cff'/><text x='16' y='22' font-family='sans-serif' font-size='15' font-weight='700' fill='white' text-anchor='middle'>EI</text></svg>">
+  <link rel="stylesheet" href="{% static 'importer/css/app.css' %}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="site-header">
+    <a class="brand" href="{% url 'importer:landing' %}">
+      <span class="brand-mark">EI</span>
+      <span class="brand-text">EasyImports</span>
+    </a>
+    <nav class="site-nav">
+      <a href="{% url 'importer:crm_connections' %}">Connect CRM</a>
+      <a href="{% url 'importer:local_settings' %}">Device storage</a>
+      <a href="{% url 'importer:crm_duplicate_journey' %}">CRM duplicates</a>
+      <a href="{% url 'importer:crm_query' %}">CRM query</a>
+      <a href="{% url 'importer:pricing' %}">Pricing</a>
+    </nav>
+  </header>
+
+  {% block stepper %}
+    {% if step %}
+    <nav class="stepper" aria-label="Progress">
+      <ol>
+        <li class="{% if step == 1 %}active{% elif step > 1 %}done{% endif %}">
+          <span class="dot">1</span><span class="label">Upload</span>
+        </li>
+        <li class="{% if step == 2 %}active{% elif step > 2 %}done{% endif %}">
+          <span class="dot">2</span><span class="label">Map columns</span>
+        </li>
+        <li class="{% if step == 3 %}active{% elif step > 3 %}done{% endif %}">
+          <span class="dot">3</span><span class="label">Configure</span>
+        </li>
+        <li class="{% if step == 4 %}active{% endif %}">
+          <span class="dot">4</span><span class="label">Review &amp; download</span>
+        </li>
+      </ol>
+    </nav>
+    {% endif %}
+  {% endblock %}
+
+  <main class="container">
+    {% if messages %}
+    <ul class="messages">
+      {% for message in messages %}
+      <li class="message {{ message.tags }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span class="footer-brand"><span class="brand-mark small-mark">EI</span> EasyImports</span>
+      <nav class="footer-nav">
+        <a href="{% url 'importer:pricing' %}">Pricing</a>
+      </nav>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

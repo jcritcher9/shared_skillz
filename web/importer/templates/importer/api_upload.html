@@ -1,0 +1,207 @@
+{% extends "importer/base.html" %}
+{% load static %}
+{% block title %}Add files · EasyImports{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="eyebrow">{{ product_label }}</p>
+  <h1>Add your files</h1>
+  <p class="lead">
+    Start with the required file. Only upload the files this setup asks for.
+    Extra reference files will not silently change the import type.
+  </p>
+</header>
+
+<div class="upload-grid">
+{% for row in rows %}
+  <section
+    class="card upload-card{% if row.spec.required %} required{% endif %}"
+    {% if row.allow_upload %}data-file-drop="isolated"{% endif %}
+  >
+    <div class="upload-card-head">
+      <div class="upload-card-head-row">
+        <h2>{{ row.spec.label }}</h2>
+        {% if row.spec.required %}<span class="pill pill-required">Required</span>{% else %}<span class="pill">Optional</span>{% endif %}
+      </div>
+      <span class="status status-{{ row.state_tone }}">{{ row.state_label }}</span>
+    </div>
+    <p class="muted">{{ row.spec.help_text }}</p>
+
+    {% if row.source %}
+      <ul class="uploaded-list">
+        <li>
+          <span class="uploaded-meta">
+            <span class="fname">{{ row.source.original_name }}</span>
+            <span class="small muted">{{ row.state_label }}</span>
+          </span>
+        </li>
+      </ul>
+    {% endif %}
+
+    {% if row.incompatible %}
+      {% if row.state == "pending" or row.state == "unknown" %}
+        <div class="message error">
+          <strong>Not used for the current setup, and still in progress.</strong>
+          Finish or retry this upload before it can be removed from the setup.
+          Pending and unknown uploads keep their slot until resolved.
+        </div>
+        <p class="muted">
+          {% if row.state == "unknown" %}
+            EasyImports needs to confirm whether the file finished uploading.
+          {% else %}
+            This upload is still being completed.
+          {% endif %}
+        </p>
+        {% if row.source and row.retry_token %}
+          <form method="post" action="{% url 'importer:retry_mutation' session.id row.source.upload_mutation_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="form_token" value="{{ row.retry_token }}">
+            {% if row.source.upload_mutation.retry_available %}
+              <button class="btn btn-ghost btn-sm" type="submit">Check this upload</button>
+            {% else %}
+              <span class="small muted">Please wait a moment before trying again.</span>
+            {% endif %}
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="message error">
+          <strong>Not used for the current setup.</strong>
+          This file stays on disk for recovery. Detach it from this setup to
+          continue, or change setup back if you still need it.
+        </div>
+        {% if row.detach_token and row.source %}
+          <form method="post" action="{% url 'importer:detach_upload' session.id row.source.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="form_token" value="{{ row.detach_token }}">
+            <input type="hidden" name="setup_revision" value="{{ row.setup_revision }}">
+            <button class="btn btn-ghost btn-sm" type="submit">
+              Remove from this setup
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+    {% elif row.state == "pending" or row.state == "unknown" %}
+      <p class="muted">
+        {% if row.state == "unknown" %}
+          EasyImports needs to confirm whether the file finished uploading.
+        {% else %}
+          This upload is still being completed.
+        {% endif %}
+      </p>
+      <form method="post" action="{% url 'importer:retry_mutation' session.id row.source.upload_mutation_id %}">
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ row.retry_token }}">
+        {% if row.source.upload_mutation.retry_available %}
+          <button class="btn btn-ghost btn-sm" type="submit">Check this upload</button>
+        {% else %}
+          <span class="small muted">Please wait a moment before trying again.</span>
+        {% endif %}
+      </form>
+    {% elif row.state == "rejected" and not row.allow_upload %}
+      <div class="message error">
+        <strong>We couldn't use this file.</strong>
+        {{ row.source.upload_mutation.error_message }}
+      </div>
+      <form method="post" action="{% url 'importer:replace_upload' session.id row.source.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ row.replacement_token }}">
+        <button class="btn btn-ghost btn-sm" type="submit">Choose a replacement</button>
+      </form>
+    {% elif row.state == "completed" %}
+      <p class="small muted">This file is ready for the import.</p>
+    {% endif %}
+
+    {% if row.allow_upload %}
+      {% if row.state == "rejected" %}
+        <p class="small muted">Choose a new file to replace the unsuccessful upload.</p>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data" data-file-drop-form="isolated">
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ row.token }}">
+        <input type="hidden" name="role" value="{{ row.spec.key }}">
+        <details class="advanced-options">
+          <summary>File options</summary>
+          <div class="field-row">
+            <div class="field">
+              <label>CSV text encoding
+                <input name="csv_encoding" value="utf-8-sig">
+              </label>
+            </div>
+            <div class="field">
+              <label>Excel sheet number
+                <input type="number" min="0" name="xlsx_sheet_index" value="0">
+              </label>
+              <p class="field-help">Use 0 for the first sheet.</p>
+            </div>
+          </div>
+        </details>
+        <div class="file-drop-zone" data-file-drop-zone>
+          <input class="file-input" required type="file" name="file" accept=".csv,.xlsx">
+          <p class="file-drop-hint">Or drop one CSV or Excel file on this card.</p>
+          <p class="file-drop-error" data-file-drop-error hidden role="alert"></p>
+        </div>
+        <div class="form-actions" data-file-drop-submit>
+          <button class="btn btn-ghost btn-sm" type="submit">Add this file</button>
+        </div>
+      </form>
+    {% endif %}
+  </section>
+{% endfor %}
+</div>
+
+<div class="form-actions setup-actions">
+  <a class="btn btn-ghost" href="{% url 'importer:product' session.id %}">Back to setup</a>
+  {% if required_ready %}
+    {% if mapping_required and not mapping_confirmed %}
+      <a class="btn btn-primary" href="{% url 'importer:column_mapping_session' session.id %}">Map columns</a>
+      <a class="btn btn-ghost" href="{% url 'importer:configure' session.id %}">Review settings</a>
+    {% elif mapping_required and mapping_confirmed %}
+      <a class="btn" href="{% url 'importer:column_mapping_session' session.id %}">Map columns</a>
+      <a class="btn btn-primary" href="{% url 'importer:configure' session.id %}">Review settings</a>
+    {% else %}
+      <a class="btn btn-primary" href="{% url 'importer:configure' session.id %}">Review settings</a>
+    {% endif %}
+  {% else %}
+    <button class="btn btn-primary" type="button" disabled>Add the required files to continue</button>
+  {% endif %}
+</div>
+
+<details class="card run-details technical-details">
+  <summary><h2>Technical details</h2></summary>
+  <p class="muted">Upload roles, states, and identifiers used for recovery and support.</p>
+  <dl>
+    <dt>Operator intent</dt>
+    <dd>
+      <code>
+        {{ session.setup_entity|default:"—" }} /
+        {{ session.setup_operation|default:"—" }} /
+        {{ session.setup_reference_source|default:"—" }} /
+        {{ session.setup_people_output|default:"—" }}
+      </code>
+    </dd>
+    <dt>Derived product key (draft)</dt>
+    <dd><code>{{ derived_product_key|default:"—" }}</code></dd>
+    <dt>Frozen product key</dt>
+    <dd><code>{{ session.product_key|default:"(frozen at import start)" }}</code></dd>
+    <dt>Setup revision</dt><dd><code>{{ session.setup_revision }}</code></dd>
+  </dl>
+  <div class="table-scroll">
+    <table class="data-table compact">
+      <thead><tr><th>Role</th><th>State</th><th>Upload ID</th><th>Error code</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><code>{{ row.spec.key }}</code></td>
+          <td>{{ row.state|default:"not_started" }}</td>
+          <td><code>{% if row.source %}{{ row.source.api_upload_id|default:"—" }}{% else %}—{% endif %}</code></td>
+          <td><code>{% if row.source %}{{ row.source.upload_mutation.error_code|default:"—" }}{% else %}—{% endif %}</code></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'importer/js/file_drop_upload.js' %}" defer></script>
+{% endblock %}

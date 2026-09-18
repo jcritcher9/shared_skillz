@@ -1,0 +1,43 @@
+{% extends "importer/base.html" %}
+
+{% block title %}Clear saved scan data and retry | EasyImports{% endblock %}
+
+{% block content %}
+<section class="panel narrow-panel">
+  <p class="eyebrow">Resolve CRM duplicates</p>
+  <h1>Clear saved scan data and retry?</h1>
+
+  <div class="callout callout-warn">
+    {% if retrying %}
+    <p>The prior recovery outcome is pending or uncertain. Retry this exact action to reconcile it safely.</p>
+    {% else %}
+    <p>This clears only this scan's saved cursor and page data, then retries the same analysis from the beginning. CRM records are not changed.</p>
+    {% endif %}
+  </div>
+
+  <dl class="kv">
+    <dt>Current status</dt>
+    <dd>{{ projection.status|default:"recovery pending" }}</dd>
+    <dt>Saved scan data</dt>
+    <dd>Cursor and resumable page data for this scan</dd>
+  </dl>
+
+  <form method="post" class="stack-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger">Clear saved scan data and retry</button>
+      <a class="btn btn-ghost" href="{% url 'importer:crm_duplicate_journey_progress' session.id %}">Keep saved scan data</a>
+    </div>
+  </form>
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <dl class="kv">
+      <dt>Run ID</dt><dd><code>{{ run_id }}</code></dd>
+      <dt>Revision</dt><dd>{{ revision }}</dd>
+      <dt>Exact retry</dt><dd>{% if retrying %}yes{% else %}available if the response is uncertain{% endif %}</dd>
+    </dl>
+  </details>
+</section>
+{% endblock %}

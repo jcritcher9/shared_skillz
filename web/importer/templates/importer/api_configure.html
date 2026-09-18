@@ -1,0 +1,308 @@
+{% extends "importer/base.html" %}
+{% block title %}Review settings · EasyImports{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="eyebrow">{{ product_label }}</p>
+  <h1>Review your import settings</h1>
+  <p class="lead">
+    Choose how EasyImports should handle matching, validation, and possible
+    duplicates.
+  </p>
+</header>
+
+{% if awaiting_projection %}
+  <section class="card">
+    <div class="message warning">
+      <strong>Your import was accepted, but the latest status is temporarily unavailable.</strong>
+      It is safe to check again; EasyImports will not start a duplicate import.
+    </div>
+    <a class="btn btn-ghost" href="">Check status</a>
+  </section>
+{% elif outstanding %}
+  <section class="card">
+    <div class="message warning">
+      <strong>EasyImports needs to confirm whether setup completed.</strong>
+      Checking again will continue the same import safely.
+    </div>
+    <form method="post" action="{% url 'importer:retry_mutation' session.id outstanding.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ retry_token }}">
+      {% if outstanding.retry_available %}
+        <button class="btn btn-primary" type="submit">Check and continue</button>
+      {% else %}
+        <span class="small muted">Please wait a moment before checking again.</span>
+      {% endif %}
+    </form>
+  </section>
+{% elif rejected %}
+  <section class="card">
+    <div class="message error">
+      <strong>We couldn't start this import.</strong>
+      {{ rejected.error_message }}
+    </div>
+    {% if rejected.is_idempotency_conflict %}
+      <p>Support needs to review this conflict before the import can be started again.</p>
+    {% else %}
+      <form method="post" action="{% url 'importer:acknowledge_rejection' session.id rejected.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ rejection_ack_token }}">
+        <button class="btn btn-ghost" type="submit">Review settings and try again</button>
+      </form>
+    {% endif %}
+    {% if mapping_gate and mapping_gate != "confirmed" and mapping_gate != "not_required" %}
+    <div class="form-actions">
+      <a class="btn btn-primary" href="{% url 'importer:column_mapping_session' session.id %}">Map columns</a>
+    </div>
+    {% endif %}
+  </section>
+{% elif mapping_gate and mapping_gate != "confirmed" and mapping_gate != "not_required" %}
+  <section class="card" id="mapping-required-gate">
+    <div class="message warning">
+      {% if mapping_gate == "stale" %}
+      <strong>Your column mapping is out of date.</strong>
+        The confirmed map no longer matches this file or setup. Map columns
+        again, confirm, then return here to start.
+      {% elif mapping_gate == "draft" %}
+      <strong>Map your columns before starting the import.</strong>
+        Your mapping is still a draft. Confirm it, then return here to start.
+      {% else %}
+      <strong>Map your columns before starting the import.</strong>
+        After your files are ready, map columns is the next step. Settings stay
+        available after the mapping is confirmed.
+      {% endif %}
+    </div>
+    <div class="form-actions">
+      <a class="btn btn-primary" href="{% url 'importer:column_mapping_session' session.id %}">Map columns</a>
+      <a class="btn btn-ghost" href="{% url 'importer:upload' session.id %}">Back to files</a>
+    </div>
+  </section>
+{% else %}
+  <div class="config-layout">
+    <section class="card config-form">
+      <form method="post" class="customer-form" id="configure-form">
+        {% csrf_token %}
+        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+        {% if form.non_field_errors %}
+          <div class="message error">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in hidden_section_fields %}
+          {{ field.as_hidden }}
+        {% endfor %}
+        <div class="config-form-grid">
+          <section class="config-this-list" aria-label="This list">
+            {% for field in this_list_fields %}
+              {% include "importer/_configure_field.html" with field=field %}
+            {% endfor %}
+          </section>
+          {% if show_optional_crm %}
+          <section class="config-optional-crm" aria-label="Optional CRM writes">
+            <details class="config-advanced" id="config-optional-crm">
+              <summary>Optional CRM writes</summary>
+              {% for field in optional_write_fields %}
+                {% include "importer/_configure_field.html" with field=field %}
+              {% endfor %}
+              {% if reference_in_optional %}
+                {% include "importer/_configure_field.html" with field=reference_in_optional %}
+              {% endif %}
+            </details>
+          </section>
+          {% endif %}
+        </div>
+        {% if show_campaign_block %}
+        <fieldset class="cm-policy-block" id="config-campaign">
+          <legend>Campaign membership</legend>
+          <p class="field-help">
+            Defaults to <strong>Do not run</strong>. Opt in only when this
+            destination supports Campaign membership
+            (ceiling: <code>{{ cm_ceiling }}</code>).
+            Use Search and pick below for each distinct Campaign name.
+            Picks are verified against live search results and accumulate
+            until you start the import.
+          </p>
+          {% if campaign_track_field %}
+            {% include "importer/_configure_field.html" with field=campaign_track_field %}
+          {% endif %}
+          {% for field in campaign_policy_fields %}
+            {% include "importer/_configure_field.html" with field=field %}
+          {% endfor %}
+        </fieldset>
+        {% endif %}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Start import</button>
+          <a class="btn" href="{% url 'importer:column_mapping_session' session.id %}">Map columns</a>
+          <a class="btn btn-ghost" href="{% url 'importer:upload' session.id %}">Back to files</a>
+        </div>
+      </form>
+
+      {% if cm_enabled_for_product and cm_connection_id and cm_ceiling != "disabled" %}
+      <section class="cm-search-panel" style="margin-top:1.25rem">
+        <h2>Find a Campaign</h2>
+        <p class="field-help">
+          Search exact Campaign names on the connected CRM. Each pick is
+          re-verified server-side and accumulates in a durable draft map
+          (prior picks survive additional searches). Draft picks do
+          <strong>not</strong> enable Campaign membership — leave the track on
+          <strong>Do not run</strong> to start without membership changes, or
+          opt in after your map is complete.
+        </p>
+        <form method="get" class="customer-form inline-search">
+          <div class="field">
+            <label for="cm_q">Campaign name (exact)</label>
+            <input id="cm_q" type="search" name="cm_q" value="{{ cm_search_q }}" minlength="2" required>
+          </div>
+          <button class="btn btn-ghost" type="submit">Search</button>
+        </form>
+        {% if cm_search_error %}
+          <div class="message error">{{ cm_search_error }}</div>
+        {% endif %}
+        {% if cm_search_result %}
+          {% if cm_search_result.too_many_matches or cm_search_result.truncated %}
+            <div class="message warning">
+              Too many Campaigns share this exact name. Use a Campaign Id column
+              or default Campaign Id instead of name resolution.
+            </div>
+          {% elif cm_search_result.campaigns %}
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Id</th>
+                    <th>Status</th>
+                    <th>Active</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for campaign in cm_search_result.campaigns %}
+                    <tr>
+                      <td>{{ campaign.name }}</td>
+                      <td><code>{{ campaign.id }}</code></td>
+                      <td>{{ campaign.status|default:"—" }}</td>
+                      <td>{{ campaign.is_active }}</td>
+                      <td>
+                        <form method="post" action="{% url 'importer:campaign_resolution_pick' session.id %}">
+                          {% csrf_token %}
+                          <input type="hidden" name="form_token" value="{{ cm_pick_token }}">
+                          <input type="hidden" name="match_key" value="{{ cm_search_q }}">
+                          <input type="hidden" name="cm_q" value="{{ cm_search_q }}">
+                          <input type="hidden" name="campaign_id" value="{{ campaign.id }}">
+                          <button class="btn btn-ghost" type="submit">Use this Campaign</button>
+                        </form>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="muted">No active Campaigns matched that exact name.</p>
+          {% endif %}
+        {% endif %}
+        {% if cm_status_result %}
+          <p class="field-help">
+            Member statuses for <code>{{ cm_status_result.campaign_id }}</code>:
+            {{ cm_status_result.statuses|join:", " }}
+          </p>
+        {% endif %}
+        {% if cm_resolution_rows %}
+          <h3>Draft resolved name map</h3>
+          <p class="field-help">
+            These drafts apply only when Campaign membership is enabled.
+            Starting with <strong>Do not run</strong> ignores them.
+          </p>
+          <div class="table-scroll">
+            <table class="data-table compact">
+              <thead><tr><th>Match key</th><th>Campaign Id</th><th>Source</th><th>Observed name</th></tr></thead>
+              <tbody>
+                {% for row in cm_resolution_rows %}
+                  <tr>
+                    <td><code>{{ row.match_key }}</code></td>
+                    <td><code>{{ row.campaign_id }}</code></td>
+                    <td>{{ row.selection_source }}</td>
+                    <td>{{ row.observed_name|default:"—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <form method="post" action="{% url 'importer:campaign_resolution_clear' session.id %}" style="margin-top:0.75rem">
+            {% csrf_token %}
+            <input type="hidden" name="form_token" value="{{ cm_clear_token }}">
+            <button class="btn btn-ghost" type="submit">Clear draft Campaign picks</button>
+          </form>
+        {% endif %}
+      </section>
+      {% elif cm_enabled_for_product and not cm_connection_id %}
+      <p class="field-help" style="margin-top:1rem">
+        Connect a CRM during setup to search Campaigns and freeze name→Id resolutions.
+      </p>
+      {% endif %}
+    </section>
+
+    <aside class="card sources-summary">
+      <h2>Import summary</h2>
+      <dl class="summary-list">
+        <dt>Setup</dt><dd>{{ product_label }}</dd>
+        <dt>Destination</dt><dd>{{ target_label }}</dd>
+        <dt>Files ready</dt><dd>{{ uploaded_rows|length }}</dd>
+        {% if cm_enabled_for_product %}
+          <dt>Campaign membership ceiling</dt><dd><code>{{ cm_ceiling }}</code></dd>
+        {% endif %}
+      </dl>
+      <p class="field-help">
+        Recommendation and matching settings never authorize CRM writes.
+        Reference reads still require an explicit authorization step later.
+        Campaign membership defaults to off until you opt in.
+      </p>
+    </aside>
+  </div>
+{% endif %}
+
+<details class="card run-details technical-details">
+  <summary><h2>Technical details</h2></summary>
+  <p class="muted">Internal contract and recovery information for support and troubleshooting.</p>
+  <dl>
+    <dt>Session ID</dt><dd><code>{{ session.id }}</code></dd>
+    <dt>Operator intent</dt>
+    <dd>
+      {% if setup_intent %}
+        <code>{{ setup_intent }}</code>
+      {% else %}
+        <code>
+          {{ session.setup_entity|default:"—" }} /
+          {{ session.setup_operation|default:"—" }} /
+          {{ session.setup_reference_source|default:"—" }}
+        </code>
+      {% endif %}
+    </dd>
+    <dt>Derived product key</dt>
+    <dd><code>{{ derived_product_key|default:session.product_key }}</code></dd>
+    <dt>Frozen product key</dt><dd><code>{{ session.product_key|default:"(not frozen yet)" }}</code></dd>
+    <dt>Setup revision</dt><dd><code>{{ session.setup_revision }}</code></dd>
+    <dt>CRM connection (draft)</dt><dd><code>{{ session.setup_connection_id|default:"—" }}</code></dd>
+    <dt>Target provider</dt><dd><code>{{ session.target_provider_id }}</code></dd>
+    {% if outstanding %}
+      <dt>Creation state</dt><dd>{{ outstanding.state }}</dd>
+      <dt>Idempotency key</dt><dd><code>{{ outstanding.idempotency_key }}</code></dd>
+    {% endif %}
+    {% if rejected %}
+      <dt>Error code</dt><dd><code>{{ rejected.error_code }}</code></dd>
+      <dt>Idempotency key</dt><dd><code>{{ rejected.idempotency_key }}</code></dd>
+    {% endif %}
+  </dl>
+  {% if uploaded_rows %}
+    <h3>Registered uploads</h3>
+    <div class="table-scroll">
+      <table class="data-table compact">
+        <thead><tr><th>Role</th><th>Upload ID</th></tr></thead>
+        <tbody>{% for row in uploaded_rows %}<tr><td><code>{{ row.role }}</code></td><td><code>{{ row.upload_id }}</code></td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if rejected %}
+    <h3>Frozen response</h3>
+    <pre>{{ rejected.response_json }}</pre>
+  {% endif %}
+</details>
+{% endblock %}

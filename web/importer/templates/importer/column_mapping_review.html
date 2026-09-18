@@ -1,0 +1,337 @@
+{% extends "importer/base.html" %}
+{% load static %}
+{% block title %}Map columns · EasyImports{% endblock %}
+{% block content %}
+<header class="page-head">
+  <p class="eyebrow">Column mapping</p>
+  <h1>Map your columns</h1>
+  <p class="lead">
+    Review how each uploaded column maps to a destination field.
+    High-confidence matches are filled in; only columns that need review require attention.
+  </p>
+  {% if status == "draft" %}
+  <p class="muted">
+    Status: <strong>Draft</strong>
+    · {{ filter_counts.all }} column{{ filter_counts.all|pluralize }}
+    {% if needs_review_count %}
+      · <strong>{{ needs_review_count }}</strong> need{{ needs_review_count|pluralize:"s," }} review
+    {% endif %}
+  </p>
+  {% endif %}
+</header>
+
+{% if status == "confirmed" %}
+<section class="card" id="mapping-confirmed">
+  <h2>Mapping confirmed</h2>
+  <p>This mapping is locked for import setup. Digests are available under Technical details.</p>
+  <div class="form-actions">
+    <a class="btn btn-primary" href="{% url 'importer:configure' session_id=session.id %}">Continue to settings</a>
+    <form method="post" action="{% url 'importer:column_mapping_session' session_id=session.id %}" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ map_again_token }}">
+      <input type="hidden" name="action" value="map_again">
+      <button class="btn" type="submit">Map again</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{% if status == "draft" %}
+<section class="card mapping-review-card" id="mapping-review" data-map-r4="1"{% if mapping_actions_blocked %} data-choices-blocked="1"{% endif %}>
+  {% if choices_load_error %}
+  <div class="message error" id="mapping-choices-error" role="alert" tabindex="-1">
+    <p><strong>Destination fields unavailable.</strong> {{ choices_load_error }}</p>
+    <p class="form-actions">
+      <a class="btn btn-primary" href="{% url 'importer:column_mapping_review' session_id=session.id plan_id=plan_id %}#mapping-choices-error">Retry load</a>
+      <a class="btn" href="{% url 'importer:column_mapping_session' session_id=session.id %}">Back to map start</a>
+    </p>
+  </div>
+  {% endif %}
+  <div class="mapping-toolbar" role="toolbar" aria-label="Filter and search columns">
+    <div class="mapping-filters" role="group" aria-label="Column filters">
+      <button type="button" class="tab active" data-filter="all" aria-pressed="true">
+        All <span class="tab-count">{{ filter_counts.all }}</span>
+      </button>
+      <button type="button" class="tab review{% if filter_counts.needs_review %} has-rows{% endif %}" data-filter="needs_review" aria-pressed="false">
+        Needs review <span class="tab-count">{{ filter_counts.needs_review }}</span>
+      </button>
+      <button type="button" class="tab" data-filter="mapped" aria-pressed="false">
+        Mapped <span class="tab-count">{{ filter_counts.mapped }}</span>
+      </button>
+      <button type="button" class="tab" data-filter="ignored" aria-pressed="false">
+        Ignored <span class="tab-count">{{ filter_counts.ignored }}</span>
+      </button>
+    </div>
+    <div class="mapping-search-wrap">
+      <label class="visually-hidden" for="mapping-column-search">Search columns</label>
+      <input
+        type="search"
+        id="mapping-column-search"
+        class="mapping-search"
+        placeholder="Search columns…"
+        autocomplete="off"
+        disabled
+      >
+    </div>
+  </div>
+
+  <p class="mapping-live-region visually-hidden" id="mapping-live" aria-live="polite" aria-atomic="true"></p>
+
+  <form
+    method="post"
+    id="mapping-review-form"
+    class="customer-form mapping-review-form"
+    data-plan-digest="{{ plan_content_digest }}"
+    data-system-ignore="{{ system_ignore }}"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="expected_plan_content_digest" value="{{ plan_content_digest }}">
+
+    <div class="mapping-bulk-bar no-js-show">
+      <p class="muted small">
+        Optional: select unresolved columns and choose Ignore selected unresolved,
+        or Ignore all unmapped for every leftover column.
+      </p>
+    </div>
+
+    <div class="table-scroll mapping-table-scroll">
+      <table class="data-table compact mapping-table" id="mapping-table">
+        <caption class="visually-hidden">Source columns and destination mappings in upload order</caption>
+        <thead>
+          <tr>
+            <th scope="col" class="col-bulk mapping-sticky-bulk">
+              <span class="visually-hidden">Select for bulk ignore</span>
+            </th>
+            <th scope="col" class="col-action mapping-sticky-action">Action</th>
+            <th scope="col" class="col-maps mapping-sticky-maps">Maps to</th>
+            <th scope="col" class="col-source mapping-sticky-source">Source column</th>
+            <th scope="col" class="col-ex">Example 1</th>
+            <th scope="col" class="col-ex">Example 2</th>
+            <th scope="col" class="col-ex">Example 3</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in table_rows %}
+          <tr
+            id="{{ row.row_anchor }}"
+            class="mapping-row mapping-row-{{ row.filter_key }}"
+            data-ordinal="{{ row.source_ordinal }}"
+            data-filter="{{ row.filter_key }}"
+            data-disposition="{{ row.disposition }}"
+            data-source-header="{{ row.source_header }}"
+            data-source-label="{{ row.source_label }}"
+            data-choice-id="{{ row.mapping_choice_id }}"
+            data-suggested-id="{{ row.suggested_mapping_choice_id }}"
+            data-status-label="{{ row.status_label }}"
+          >
+            <td class="col-bulk mapping-sticky-bulk">
+              {% if row.filter_key == "needs_review" %}
+              <label class="bulk-check">
+                <input
+                  type="checkbox"
+                  name="bulk_ordinal"
+                  value="{{ row.source_ordinal }}"
+                  class="mapping-bulk-checkbox"
+                >
+                <span class="visually-hidden">Select {{ row.source_label }} for bulk ignore</span>
+              </label>
+              {% else %}
+              <span class="muted" aria-hidden="true">·</span>
+              {% endif %}
+            </td>
+            <td class="col-action mapping-sticky-action">
+              <button
+                type="button"
+                class="btn btn-small mapping-action-btn js-only"
+                data-open-picker
+                data-ordinal="{{ row.source_ordinal }}"
+                aria-haspopup="dialog"
+                {% if mapping_actions_blocked %}disabled{% endif %}
+                hidden
+              >
+                {{ row.action_label }}
+              </button>
+              <span class="mapping-status-pill status-{{ row.filter_key }}" title="{{ row.status_label }}">
+                {{ row.status_label }}
+              </span>
+            </td>
+            <td class="col-maps mapping-sticky-maps">
+              <div class="maps-to-cell">
+                <strong class="maps-to-label" data-maps-label>{{ row.maps_to_label }}</strong>
+                {% if row.suggestion_reason and row.filter_key == "needs_review" %}
+                <span class="muted small maps-reason">{{ row.suggestion_reason }}</span>
+                {% endif %}
+              </div>
+              {# No-JS + form submit: native select per row (progressive enhancement updates these). #}
+              <label class="mapping-fallback-select">
+                <span class="visually-hidden">Map {{ row.source_label }} to</span>
+                <select
+                  name="choice_{{ row.source_ordinal }}"
+                  id="choice_{{ row.source_ordinal }}"
+                  data-ordinal="{{ row.source_ordinal }}"
+                  class="mapping-choice-select"
+                  {% if mapping_actions_blocked %}disabled{% endif %}
+                >
+                  <option value="">— Needs review —</option>
+                  {% for choice in choices %}
+                    {% if choice.mapping_choice_id == system_ignore or choice.choice_kind == "ignore" %}
+                    <option
+                      value="{{ choice.mapping_choice_id }}"
+                      {% if row.mapping_choice_id == choice.mapping_choice_id %}selected{% endif %}
+                    >Ignore column</option>
+                    {% else %}
+                    <option
+                      value="{{ choice.mapping_choice_id }}"
+                      {% if row.mapping_choice_id == choice.mapping_choice_id %}selected{% endif %}
+                      {% if not row.mapping_choice_id and row.suggested_mapping_choice_id == choice.mapping_choice_id %}data-suggested="1"{% endif %}
+                    >
+                      {% if multi_object and choice.object_scope %}{{ choice.object_scope }} · {% endif %}{{ choice.label }}
+                    </option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+              </label>
+            </td>
+            <td class="col-source mapping-sticky-source">
+              <span class="source-header-text">{{ row.source_label }}</span>
+            </td>
+            {% for sample in row.sample_cells %}
+            <td class="col-ex sample-cell"><span class="sample-text">{{ sample }}</span></td>
+            {% endfor %}
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="table-empty">No columns on this plan.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mapping-actions form-actions">
+      <button class="btn" type="submit" name="action" value="bulk_ignore"{% if mapping_actions_blocked %} disabled aria-disabled="true"{% endif %}>
+        Ignore selected unresolved
+      </button>
+      <button class="btn" type="submit" name="action" value="bulk_ignore_all"{% if mapping_actions_blocked %} disabled aria-disabled="true"{% endif %}>
+        Ignore all unmapped
+      </button>
+      <span class="tab-sep" aria-hidden="true"></span>
+      <button class="btn" type="submit" name="action" value="save_draft"{% if mapping_actions_blocked %} disabled aria-disabled="true"{% endif %}>
+        Save draft
+      </button>
+      <button
+        class="btn btn-primary"
+        type="submit"
+        name="action"
+        value="confirm_mapping"
+        {% if not can_confirm %}disabled aria-disabled="true"{% endif %}
+        title="{% if mapping_actions_blocked %}Destination fields must load before confirm{% elif can_confirm %}Confirm mapping and continue{% else %}Resolve or ignore every column that needs review first{% endif %}"
+      >
+        Confirm mapping &amp; continue
+      </button>
+    </div>
+    {% if needs_review_count %}
+    <p class="message error" id="mapping-confirm-hint">
+      Resolve or ignore every column that needs review before you can confirm.
+    </p>
+    {% endif %}
+  </form>
+</section>
+
+{# Focused field picker (enhanced path). One dialog for every row. #}
+<dialog
+  id="mapping-field-picker"
+  class="mapping-picker-dialog"
+  aria-labelledby="mapping-picker-title"
+  closedby="any"
+>
+  <form method="dialog" id="mapping-picker-form" class="mapping-picker-form">
+    <header class="mapping-picker-head">
+      <h2 id="mapping-picker-title">Edit mapping</h2>
+      <p class="muted" id="mapping-picker-source">Source column</p>
+      <p class="mapping-picker-examples muted small" id="mapping-picker-examples"></p>
+    </header>
+
+    <fieldset class="mapping-picker-mode">
+      <legend class="visually-hidden">Map as</legend>
+      <label class="radio-pill">
+        <input type="radio" name="picker_mode" value="field" checked>
+        Target field
+      </label>
+      <label class="radio-pill">
+        <input type="radio" name="picker_mode" value="ignore">
+        Ignore column
+      </label>
+    </fieldset>
+
+    <div id="mapping-picker-field-panel">
+      <label class="field" for="mapping-picker-search">
+        <span>Find a field</span>
+        <input type="search" id="mapping-picker-search" autocomplete="off" placeholder="Search fields…">
+      </label>
+      <div
+        id="mapping-picker-list"
+        class="mapping-picker-list"
+        role="listbox"
+        aria-label="Destination fields"
+        tabindex="-1"
+      ></div>
+    </div>
+
+    <p id="mapping-picker-ignore-panel" class="mapping-picker-ignore-note" hidden>
+      This column will not be imported.
+    </p>
+
+    <footer class="mapping-picker-actions form-actions">
+      <button type="submit" value="cancel" class="btn" id="mapping-picker-cancel">Cancel</button>
+      <button type="submit" value="apply" class="btn btn-primary" id="mapping-picker-apply">Apply mapping</button>
+    </footer>
+  </form>
+</dialog>
+
+{{ choices_for_js|json_script:"mapping-choices-data" }}
+{% endif %}
+
+<details class="card run-details technical-details">
+  <summary><h2>Technical details</h2></summary>
+  <dl>
+    <dt>Plan status</dt>
+    <dd><code>{{ status }}</code></dd>
+    <dt>Plan id</dt>
+    <dd><code>{{ plan_id }}</code></dd>
+    <dt>Plan content digest</dt>
+    <dd><code class="mono">{{ plan_content_digest|default:plan.plan_content_digest }}</code></dd>
+    <dt>Source schema digest</dt>
+    <dd><code class="mono">{{ plan.source_schema_digest }}</code></dd>
+    <dt>Destination digest</dt>
+    <dd><code class="mono">{{ plan.destination_digest }}</code></dd>
+    <dt>Target contract digest</dt>
+    <dd><code class="mono">{{ plan.target_contract_digest }}</code></dd>
+    {% if plan.confirmed_digests %}
+    <dt>Confirmed digests</dt>
+    <dd>
+      <ul>
+        {% for key, value in plan.confirmed_digests.items %}
+        <li><code>{{ key }}</code>: <code class="mono">{{ value }}</code></li>
+        {% endfor %}
+      </ul>
+    </dd>
+    {% endif %}
+    {% if plan.destination %}
+    <dt>Destination</dt>
+    <dd><code>{{ plan.destination }}</code></dd>
+    {% endif %}
+  </dl>
+</details>
+
+<p class="form-actions">
+  <a href="{% url 'importer:upload' session_id=session.id %}">Back to files</a>
+</p>
+{% endblock %}
+
+{% block scripts %}
+{% if status == "draft" %}
+<script src="{% static 'importer/js/column_mapping_review.js' %}" defer></script>
+{% endif %}
+{% endblock %}

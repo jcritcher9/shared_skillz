@@ -1,0 +1,210 @@
+{% extends "importer/base.html" %}
+{% block title %}Review merge plan — EasyImports{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Review merge plan</h1>
+  {% if materialization_wait %}
+  <p class="lede" data-reviewed-result-wait>
+    Still preparing the merge plan. Refresh this page to check again. GET does not start more work.
+  </p>
+  <div class="form-actions">
+    <a class="button btn btn-primary" href="{{ request.path }}" data-reviewed-result-wait-refresh>Refresh status</a>
+  </div>
+  {% else %}
+  <p class="lede">
+    Inspect the reviewed outcomes, then explicitly approve the merge plan.
+    Approving does <strong>not</strong> apply CRM merges. Write authorization is a
+    separate step.
+  </p>
+  {% endif %}
+  {% if not materialization_wait %}
+  <p class="callout callout-ok" data-field-fill-copy>
+    {{ field_fill_empty_sentence }}
+  </p>
+  {% endif %}
+
+  {% if form_errors and not materialization_wait %}
+  <ul class="errorlist">
+    {% for err in form_errors %}<li>{{ err }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if reviewed_result %}
+  <dl class="summary-grid">
+    <div>
+      <dt>Records analyzed</dt>
+      <dd>{{ reviewed_result.analyzed_record_count }}</dd>
+    </div>
+    <div>
+      <dt>Duplicate groups found</dt>
+      <dd>{{ reviewed_result.total_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Auto-approved (high confidence)</dt>
+      <dd>{{ auto_approved_group_count|default:0 }}</dd>
+    </div>
+    <div>
+      <dt>Approved by operator</dt>
+      <dd>{{ operator_approved_group_count|default:reviewed_result.approved_merge_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Approved for merge (total)</dt>
+      <dd>{{ reviewed_result.approved_merge_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Quarantined (no merge)</dt>
+      <dd>{{ reviewed_result.quarantined_group_count }}</dd>
+    </div>
+    <div>
+      <dt>Survivors / losers</dt>
+      <dd>{{ reviewed_result.survivor_count }} / {{ reviewed_result.loser_count }}</dd>
+    </div>
+  </dl>
+
+  {% if oversized_quarantine_unavailable %}
+  <div class="callout" data-oversized-quarantine-unavailable="1" role="alert">
+    <p>{{ oversized_quarantine_unavailable }}</p>
+  </div>
+  {% elif oversized_quarantine_components %}
+  <div class="callout" data-oversized-quarantine="1">
+    <h2>Oversized components (not duplicate groups)</h2>
+    <p>These records were too large to auto-resolve and were quarantined.</p>
+    <ul>
+      {% for item in oversized_quarantine_components %}
+      <li>
+        {% for mid in item.member_ids %}<code>{{ mid }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <p><a href="{{ review_url }}">Review individual group dispositions</a> before approving this merge plan.</p>
+  {% comment %}
+    {% for item in visible_dispositions %}
+    <li>
+      <strong>{{ item.group_id }}</strong> — {{ item.disposition }}
+      {% if item.decision_origin == "high_confidence_threshold" %}
+        · <em>auto-approved (high confidence)</em>
+      {% elif item.decision_origin == "operator" %}
+        · <em>operator</em>
+      {% endif %}
+      {% if item.selected_survivor_id %}
+        · survivor <code>{{ item.selected_survivor_id }}</code>
+      {% endif %}
+      {% if item.member_ids %}
+        · members
+        {% for mid in item.member_ids %}<code>{{ mid }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+      {% endif %}
+    </li>
+    {% empty %}
+    <li>No dispositions recorded.</li>
+    {% endfor %}
+  {% endcomment %}
+  {% else %}
+  <p>Reviewed-result summary is not available yet.</p>
+  {% endif %}
+
+  {% if already_authorized %}
+  <p class="status">
+    Merge authorization has already been submitted
+    {% if continuation_status %}(status: {{ continuation_status }}){% endif %}.
+    Open the workflow for terminal results.
+  </p>
+  <p>
+    <a class="button" href="{{ workflow_url }}">Open workflow</a>
+    <a class="button secondary" href="{{ start_url }}">CRM duplicates home</a>
+  </p>
+
+  {% elif plan_frozen and supported_modes %}
+  <form method="post" class="stack">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="merge_action" value="authorize">
+    <fieldset class="merge-mode-choices">
+      <legend>How should EasyImports apply these merges?</legend>
+      {% for mode in supported_modes %}
+      <label class="choice">
+        <input
+          type="radio"
+          name="selected_mode"
+          value="{{ mode }}"
+          {% if forloop.first %}checked{% endif %}
+          required
+        >
+        {% if mode == "preview" %}Preview merge plan (no CRM changes)
+        {% elif mode == "dry_run" %}Dry run (test merges without applying)
+        {% elif mode == "execute" %}Apply merges in the connected CRM
+        {% else %}{{ mode }}{% endif %}
+      </label>
+      {% endfor %}
+    </fieldset>
+    <p class="hint">
+      The source-read grant used during analysis never authorizes CRM writes.
+      Choosing a mode here is a separate, journaled authorization.
+    </p>
+    <button type="submit" class="button btn btn-primary btn-cta">Authorize merge step</button>
+  </form>
+  <form method="post" class="stack secondary-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ invalidate_form_token }}">
+    <input type="hidden" name="merge_action" value="invalidate">
+    <button type="submit" class="button btn btn-ghost btn-cta">
+      Go back to reviewing groups
+    </button>
+    <p class="hint">
+      Going back lets you review groups again. Approving the plan again rebuilds
+      digests. This does not apply CRM writes.
+    </p>
+  </form>
+
+  {% elif plan_frozen %}
+  <p class="status">
+    Merge plan is approved, but no write modes are available for this connection.
+  </p>
+  <form method="post" class="stack secondary-form">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ invalidate_form_token }}">
+    <input type="hidden" name="merge_action" value="invalidate">
+    <button type="submit" class="button btn btn-ghost btn-cta">Go back to reviewing groups</button>
+  </form>
+
+  {% else %}
+  <form method="post" class="stack">
+    {% csrf_token %}
+    <input type="hidden" name="form_token" value="{{ form_token }}">
+    <input type="hidden" name="merge_action" value="finalize">
+    <input type="hidden" name="summary_expected_revision" value="{{ reviewed_result.expected_revision }}">
+    <input type="hidden" name="summary_decision_set_content_digest" value="{{ reviewed_result.decision_set_content_digest }}">
+    <p class="hint">
+      Approving compiles all reviewed group outcomes into the neutral merge-plan
+      boundary. This is a journaled POST — loading this page does not approve or
+      authorize anything.
+    </p>
+    <button type="submit" class="button btn btn-primary btn-cta">Approve merge plan</button>
+  </form>
+  {% endif %}
+
+  <p class="actions">
+    <a href="{{ review_url }}">Back to review summary</a>
+    ·
+    <a href="{{ workflow_url }}">Workflow details</a>
+    ·
+    <a href="{{ start_url }}">Start over</a>
+  </p>
+
+  <details class="technical">
+    <summary>Technical details</summary>
+    <ul>
+      {% if continuation_run_id %}<li>Continuation run: <code>{{ continuation_run_id }}</code></li>{% endif %}
+      {% if decision_set_content_digest %}<li>Decision-set digest: <code>{{ decision_set_content_digest }}</code></li>{% endif %}
+      {% if auto_merge_min_confidence %}<li>Auto-merge threshold T: <code>{{ auto_merge_min_confidence }}</code></li>{% endif %}
+      {% if review_contract %}<li>Review contract: <code>{{ review_contract }}</code></li>{% endif %}
+      {% if reviewed_result.source_snapshot_digest %}<li>Source snapshot digest: <code>{{ reviewed_result.source_snapshot_digest }}</code></li>{% endif %}
+      {% if reviewed_result.analysis_work_digest %}<li>Analysis work digest: <code>{{ reviewed_result.analysis_work_digest }}</code></li>{% endif %}
+      {% if reviewed_result.mapping_digest %}<li>Mapping digest: <code>{{ reviewed_result.mapping_digest }}</code></li>{% endif %}
+      {% if effect_intent %}<li>Effect track: <code>{{ effect_intent.track }}</code></li>{% endif %}
+    </ul>
+  </details>
+</section>
+{% endblock %}

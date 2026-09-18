@@ -1,0 +1,171 @@
+{% extends "importer/base.html" %}
+{% block title %}Duplicate analysis progress · EasyImports{% endblock %}
+{% block content %}
+<section class="panel"{% if needs_auto_disposition %} data-auto-disposition-wait{% endif %}>
+  <h1>Reading and analyzing records</h1>
+  <p class="lede">
+    {% if read_progress_copy %}
+    <span class="read-progress-lede-count">{{ read_progress_copy }}.</span>
+    {% endif %}
+    {{ progress_message }}
+  </p>
+
+  {% if projection.paused_effect_diagnostic %}
+  <div class="callout paused-effect-diagnostic" role="status">
+    <p>{{ projection.paused_effect_diagnostic.message }}</p>
+  </div>
+  {% endif %}
+
+  {% if read_progress_copy %}
+  <div class="read-progress-status" role="status" aria-live="polite">
+    <p class="read-progress-label">Live CRM read</p>
+    <p class="read-progress-figure">
+      <strong>{{ read_progress_count_display }}</strong>
+      <span>{{ read_progress_noun }} read so far</span>
+    </p>
+  </div>
+  {% endif %}
+
+  {% if analysis_progress_copy %}
+  <div class="analysis-progress-status" role="status" aria-live="polite">
+    <p class="analysis-progress-label">Duplicate analysis</p>
+    <p class="analysis-progress-figure">{{ analysis_progress_copy }}</p>
+  </div>
+  {% endif %}
+
+  <div class="callout">
+    <p>
+      EasyImports is loading authoritative CRM records and discovering
+      possible duplicates. There is no separate decision to load reference
+      data — your source choice already authorized this read.
+    </p>
+    {% if projection.summary.analyzed_record_count is not None %}
+    <p class="muted">Records analyzed so far: {{ projection.summary.analyzed_record_count }}</p>
+    {% endif %}
+    {% if projection.summary.duplicate_group_count is not None %}
+    <p class="muted">Groups found: {{ projection.summary.duplicate_group_count }}</p>
+    {% endif %}
+    {% if projection.summary.oversized_quarantine_record_count %}
+    <div class="callout" data-oversized-quarantine="1">
+      <p>
+        {{ projection.summary.oversized_quarantine_record_count }} records in
+        {{ projection.summary.oversized_quarantine_component_count }} components
+        were too large to auto-resolve and were quarantined. They are not
+        final duplicate groups.
+      </p>
+      {% if projection.oversized_quarantine_components %}
+      <ul>
+        {% for item in projection.oversized_quarantine_components %}
+        <li>
+          {% for mid in item.member_ids %}<code>{{ mid }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if auto_merge_min_confidence %}
+    <p class="muted">
+      Auto-merge threshold frozen at <strong>{{ auto_merge_min_confidence }}</strong>.
+      High-confidence groups are auto-approved once after analysis is ready
+      (journaled POST; not on each status refresh alone).
+    </p>
+    {% endif %}
+    {% if auto_approved_group_count %}
+    <p class="muted">Auto-approved {{ auto_approved_group_count }} high-confidence groups.</p>
+    {% endif %}
+    <p class="muted">Workflow status: <code>{{ projection.status|default:"unknown" }}</code>
+      {% if projection.stage %} · stage <code>{{ projection.stage }}</code>{% endif %}
+    </p>
+    <p class="muted">Started {{ session.created_at|timesince }} ago. This page updates between bounded CRM read batches.</p>
+  </div>
+
+  <ol class="progress-steps" aria-label="Duplicate discovery progress">
+    <li><strong>Connected CRM confirmed</strong> — complete</li>
+    <li class="progress-step-read{% if read_progress_count is not None %} has-live-count{% endif %}"{% if read_progress_count is not None %} data-read-progress-count="{{ read_progress_count }}" data-read-progress-noun="{{ read_progress_noun }}"{% endif %}>
+      <strong>Read active CRM records</strong>{% if read_progress_copy %} — {{ read_progress_copy }}{% endif %} —
+      {% if is_failed %}stopped{% elif auto_continue_read %}reading next batch{% elif projection.summary.analyzed_record_count is not None or projection.status == "awaiting_review" or projection.status == "succeeded" %}complete{% else %}in progress{% endif %}
+    </li>
+    <li>
+      <strong>Discover duplicate groups</strong>{% if analysis_progress_copy %} — {{ analysis_progress_copy }}{% endif %} —
+      {% if is_failed %}stopped{% elif analysis_progress_review_ready or projection.summary.duplicate_group_count is not None or projection.status == "awaiting_review" or projection.status == "succeeded" %}complete{% elif auto_continue_read %}waiting for more records{% else %}in progress{% endif %}
+    </li>
+    <li><strong>Open review</strong> — {% if projection.status == "awaiting_review" or projection.status == "succeeded" %}ready{% else %}pending{% endif %}</li>
+  </ol>
+
+  <div class="form-actions">
+    {% if projection.paused_effect_diagnostic.code == "reference_acquisition_saved_progress_reset_required" %}
+    <a class="button btn btn-danger" href="{% url 'importer:crm_duplicate_reference_acquisition_recovery' session.id %}">Clear stale scan data and retry</a>
+    {% endif %}
+    {% if is_failed %}
+    <a class="button btn btn-primary" href="{{ start_url }}">Return to source</a>
+    <a class="button btn" href="{{ workflow_url }}">Open workflow details</a>
+    {% if journey_id %}
+    <form method="post" action="{% url 'importer:crm_duplicate_journey_clear' journey_id %}" style="display:inline;">
+      {% csrf_token %}
+      <button class="link-danger" type="submit">Clear journey and start over</button>
+    </form>
+    {% endif %}
+    {% else %}
+    <form method="post" style="display:inline;"{% if auto_continue_read %} data-auto-continue-read{% endif %}>
+      {% csrf_token %}
+      <input type="hidden" name="form_token" value="{{ form_token }}">
+      {% if needs_auto_disposition %}
+      <button type="submit" class="button btn btn-primary">
+        Continue to review
+      </button>
+      <p class="field-help" style="display:inline; margin-left:0.5rem;">
+        Journals high-confidence auto-approvals (POST only; exact-retry safe).
+      </p>
+      {% else %}
+      <button type="submit" class="button btn btn-primary">
+        {% if auto_continue_read %}Continue reading next batch{% elif uncertain_read %}Reconcile saved CRM read{% else %}Refresh status{% endif %}
+      </button>
+      {% endif %}
+    </form>
+    <a class="button btn" href="{{ workflow_url }}">Open workflow details</a>
+    <a class="button btn" href="{{ start_url }}">Start another journey</a>
+    {% endif %}
+  </div>
+
+  <details class="technical-details">
+    <summary>Technical details</summary>
+    <p class="muted">
+      Run <code>{{ run_id }}</code>.
+      {% if options.read_grant_id %}Read grant <code>{{ options.read_grant_id }}</code>.{% endif %}
+      Exact retry reuses the journaled implied-reference authorization.
+    </p>
+  </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var continueForm = document.querySelector("form[data-auto-continue-read]");
+  if (continueForm) {
+    window.setTimeout(function () {
+      continueForm.setAttribute("aria-busy", "true");
+      var button = continueForm.querySelector("button[type=submit]");
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Reading next CRM batch…";
+      }
+      continueForm.submit();
+    }, 1200);
+    return;
+  }
+  // Auto-refresh while analysis is in progress (no JS required for correctness).
+  // Auto-merge wait is an explicit Continue POST — do not emit a 2.5 s reload.
+  {% if not needs_auto_disposition %}
+  var status = "{{ projection.status|escapejs }}";
+  var resumeProcessing = {% if resume_processing %}true{% else %}false{% endif %};
+  if (resumeProcessing || status === "running" || status === "ready" || status === "awaiting_effect_authorization") {
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2500);
+  }
+  {% endif %}
+})();
+</script>
+{% endblock %}

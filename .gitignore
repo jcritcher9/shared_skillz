@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .DS_Store
+web/db.sqlite3
+web/media/
